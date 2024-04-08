@@ -1,0 +1,10 @@
+#!/bin/bash
+# This file is part of GLPI To Bileto.
+# Copyright 2024 Probesys
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+SCRIPT_PATH=$(dirname $(realpath -s $0))
+APP_PATH=$(realpath $SCRIPT_PATH/../..)
+USER=$(id -u):$(id -g)
+
+docker run -ti --rm --user $USER -v $APP_PATH:/var/www/html glpi-to-docker composer "$@"
