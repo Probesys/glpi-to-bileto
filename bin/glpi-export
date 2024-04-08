@@ -1,0 +1,24 @@
+#!/bin/env php
+<?php
+
+// This file is part of GLPI To Bileto.
+// Copyright 2024 Probesys
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+if (php_sapi_name() !== 'cli') {
+    die('This script must be called from command line.');
+}
+
+$app_path = realpath(__DIR__ . '/..');
+
+assert($app_path !== false);
+
+include $app_path . '/autoload.php';
+
+$application = new \App\Application([
+    'app_path' => $app_path,
+]);
+
+$result = $application->execute($argv);
+echo "\n";
+exit($result);
