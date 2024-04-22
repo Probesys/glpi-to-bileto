@@ -6,26 +6,21 @@
 
 namespace App;
 
-/**
- * @phpstan-type AppConfiguration array{
- *     app_path: string,
- * }
- */
 class Application
 {
-    public string $app_path;
+    private Database $database;
 
-    public Http $http;
-
-    public string $url_api;
-
-    /**
-     * @param AppConfiguration $configuration
-     **/
-    public function __construct(array $configuration)
+    public function __construct(string $app_path)
     {
-        $this->app_path = $configuration['app_path'];
-        $this->http = new Http();
+        $dotenv = new Dotenv("{$app_path}/.env");
+
+        $this->database = Database::get([
+            'host' => $dotenv->pop('DB_HOST', 'localhost'),
+            'port' => intval($dotenv->pop('DB_PORT', '3306')),
+            'dbname' => $dotenv->pop('DB_NAME', 'glpi'),
+            'username' => $dotenv->pop('DB_USERNAME', 'mariadb'),
+            'password' => $dotenv->pop('DB_PASSWORD', 'mariadb'),
+        ]);
     }
 
     /**
@@ -35,76 +30,10 @@ class Application
      */
     public function execute(array $arguments): int
     {
-        if (count($arguments) !== 2) {
+        if (count($arguments) !== 1) {
             echo $this->usage();
             return -1;
         }
-
-        $url_base = $arguments[1];
-        $url_base = trim($url_base, '/');
-
-        if (!$this->isValidUrl($url_base)) {
-            echo "{$url_base} is not a valid URL.";
-            return -1;
-        }
-
-        $this->url_api = "{$url_base}/apirest.php";
-
-        list (
-            $app_token,
-            $user_token,
-            $session_token,
-        ) = $this->loadTokens();
-
-        if (!$app_token || !$user_token) {
-            $this->askTokens();
-
-            list (
-                $app_token,
-                $user_token,
-                $session_token,
-            ) = $this->loadTokens();
-
-            assert($app_token !== null);
-            assert($user_token !== null);
-        }
-
-        if (!$session_token) {
-            $url_init_session = "{$this->url_api}/initSession";
-            list($code, $response) = $this->http->get(
-                $url_init_session,
-                ['user_token' => $user_token],
-                options: [
-                    'headers' => [
-                        'App-Token' => $app_token,
-                    ],
-                ]
-            );
-
-            if ($code !== 200) {
-                echo "Cannot get a session token at {$url_init_session}: code {$code}\n";
-                echo $response;
-                return -1;
-            }
-
-            $data = json_decode($response, true);
-            if (!is_array($data)) {
-                echo "Cannot get a session token at {$url_init_session}: invalid JSON\n{$response}";
-                return -1;
-            }
-
-            if (!isset($data['session_token']) || !is_string($data['session_token'])) {
-                $data = print_r($data, true);
-                echo "Cannot get a session token at {$url_init_session}:\n{$data}";
-                return -1;
-            }
-
-            $session_token = $data['session_token'];
-            $this->storeSessionToken($session_token);
-        }
-
-        $this->http->headers['Session-Token'] = $session_token;
-        $this->http->headers['App-Token'] = $app_token;
 
         $glpi_data = [];
         try {
@@ -125,10 +54,9 @@ class Application
             echo "OK\n";
 
             echo "Getting tickets…\n";
-            $tickets = $this->getApi('/Ticket');
+            $tickets = $this->exportTicketsAsTickets();
             foreach ($tickets as $ticket) {
-                $ticket_json = $this->exportTicketAsTicket($ticket);
-                $glpi_data["tickets/{$ticket_json['organizationId']}/{$ticket_json['id']}"] = $ticket_json;
+                $glpi_data["tickets/{$ticket['organizationId']}/{$ticket['id']}"] = $ticket;
             }
             echo "OK\n";
         } catch (\Exception $e) {
@@ -150,9 +78,7 @@ class Application
 
         $now = new \DateTimeImmutable();
         $now_formatted = $now->format('Y-m-d_H\hi');
-        /** @var string */
-        $host = parse_url($url_base, PHP_URL_HOST);
-        $filepath = "./{$now_formatted}_{$host}_data.zip";
+        $filepath = "./{$now_formatted}_glpi_data.zip";
 
         $zip_archive = new \ZipArchive();
         $zip_archive->open($filepath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
@@ -172,67 +98,8 @@ class Application
     public function usage(): string
     {
         return <<<TEXT
-        Usage: php bin/glpi-export URL
-
-        URL must be a valid URL to a GLPI server.
+        Usage: php bin/glpi-export
         TEXT;
-    }
-
-    public function isValidUrl(string $url): bool
-    {
-        if (filter_var($url, FILTER_VALIDATE_URL) === false) {
-            return false;
-        }
-
-        $url_components = parse_url($url);
-
-        return (
-            $url_components &&
-            isset($url_components['scheme']) &&
-            isset($url_components['host']) &&
-            in_array(strtolower($url_components['scheme']), ['http', 'https'])
-        );
-    }
-
-    /**
-     * @return array{?string, ?string, ?string}
-     */
-    public function loadTokens(): array
-    {
-        $dotenv = new Dotenv("{$this->app_path}/.env");
-        return [
-           $dotenv->pop('APP_TOKEN'),
-           $dotenv->pop('USER_TOKEN'),
-           $dotenv->pop('SESSION_TOKEN'),
-        ];
-    }
-
-    public function askTokens(): void
-    {
-        $stdin = fopen('php://stdin', 'r');
-
-        if ($stdin === false) {
-            throw new \RuntimeException('Cannot open stdin stream.');
-        }
-
-        echo "App Token: ";
-        $app_token = trim(fgets($stdin) ?: '');
-        echo "User Token: ";
-        $user_token = trim(fgets($stdin) ?: '');
-
-        file_put_contents("{$this->app_path}/.env", <<<TEXT
-            APP_TOKEN = '{$app_token}'
-            USER_TOKEN = '{$user_token}'
-            TEXT);
-    }
-
-    public function storeSessionToken(string $session_token): void
-    {
-        file_put_contents(
-            "{$this->app_path}/.env",
-            "\nSESSION_TOKEN = '{$session_token}'",
-            FILE_APPEND
-        );
     }
 
     /**
@@ -240,7 +107,10 @@ class Application
      */
     public function exportEntitiesAsOrganizations(): array
     {
-        $data = $this->getApi('/Entity');
+        $data = $this->fetchAll(<<<SQL
+            SELECT id, completename
+            FROM glpi_entities
+        SQL);
 
         $organizations = [];
 
@@ -268,7 +138,10 @@ class Application
      */
     public function exportProfilesAsRoles(): array
     {
-        $data = $this->getApi('/Profile');
+        $data = $this->fetchAll(<<<SQL
+            SELECT id, name, comment
+            FROM glpi_profiles
+        SQL);
 
         $roles = [];
 
@@ -290,19 +163,24 @@ class Application
      */
     public function exportUsersAsUsers(): array
     {
-        $data = $this->getApi('/User');
+        $data = $this->fetchAll(<<<SQL
+            SELECT id, name, realname, firstname, entities_id, user_dn
+            FROM glpi_users
+        SQL);
 
         $users = [];
 
         foreach ($data as $user) {
-            $user_emails = $this->getApi("/User/{$user['id']}/UserEmail");
-            $user_email = ArrayHelper::find($user_emails, function (array $user_email): bool {
-                return $user_email['is_default'];
-            });
+            $email = $this->fetchColumn(<<<SQL
+                SELECT email
+                FROM glpi_useremails
+                WHERE users_id = :user_id
+                AND is_default = true
+            SQL, [
+                ':user_id' => $user['id'],
+            ]);
 
-            if ($user_email) {
-                $email = $user_email['email'];
-            } else {
+            if (!$email) {
                 echo "[Warning] User {$user['id']} has no email.\n";
                 $email = '';
             }
@@ -321,7 +199,13 @@ class Application
                 $ldap_identifier = $user['name'];
             }
 
-            $user_profiles = $this->getApi("/User/{$user['id']}/Profile_User");
+            $user_profiles = $this->fetchAll(<<<SQL
+                SELECT profiles_id, entities_id
+                FROM glpi_profiles_users
+                WHERE users_id = :user_id
+            SQL, [
+                ':user_id' => $user['id'],
+            ]);
 
             $authorizations = [];
             foreach ($user_profiles as $user_profile) {
@@ -352,44 +236,46 @@ class Application
      */
     public function exportProjectTasksAsContracts(): array
     {
-        $data = $this->getApi('/Contract');
-        $contracts_by_ids = [];
-        foreach ($data as $contract) {
-            $contracts_by_ids[$contract['id']] = $contract;
-        }
+        $contracts_by_ids = $this->fetchIndexed(<<<SQL
+            SELECT id, notice, comment, entities_id
+            FROM glpi_contracts
+        SQL);
 
-        $data = $this->getApi('/Project');
-        $projects_by_ids = [];
-        foreach ($data as $project) {
-            $projects_by_ids[$project['id']] = $project;
-        }
+        $projects_by_ids = $this->fetchIndexed(<<<SQL
+            SELECT id, name
+            FROM glpi_projects
+        SQL);
 
-        $data = $this->getApi('/PluginProjectbridgeContract');
-        $projects_to_contracts = [];
-        foreach ($data as $pb_contract) {
-            $projects_to_contracts[$pb_contract['project_id']] = $pb_contract['contract_id'];
-        }
+        $projects_to_contracts = $this->fetchKeyValue(<<<SQL
+            SELECT project_id, contract_id
+            FROM glpi_plugin_projectbridge_contracts
+        SQL);
 
-        $data = $this->getApi('/ProjectTask');
+        $data = $this->fetchAll(<<<SQL
+            SELECT id, projects_id, plan_start_date, plan_end_date, name, planned_duration
+            FROM glpi_projecttasks
+        SQL);
 
         $contracts = [];
 
         foreach ($data as $project_task) {
-            if (!isset($projects_by_ids[$project_task['projects_id']])) {
+            $project_id = $project_task['projects_id'];
+
+            if (!isset($projects_by_ids[$project_id])) {
                 echo "[Warning] Skipping project task {$project_task['id']}: ";
-                echo "project {$project_task['projects_id']} doesn't exist\n";
+                echo "project {$project_id} doesn't exist\n";
                 continue;
             }
 
-            $project = $projects_by_ids[$project_task['projects_id']];
+            $project = $projects_by_ids[$project_id];
 
-            if (!isset($projects_to_contracts[$project['id']])) {
+            if (!isset($projects_to_contracts[$project_id])) {
                 echo "[Warning] Skipping project task {$project_task['id']}: ";
-                echo "contract for project {$project['id']} doesn't exist\n";
+                echo "contract for project {$project_id} doesn't exist\n";
                 continue;
             }
 
-            $contract_id = $projects_to_contracts[$project['id']];
+            $contract_id = $projects_to_contracts[$project_id];
 
             if (!isset($contracts_by_ids[$contract_id])) {
                 echo "[Warning] Skipping project task {$project_task['id']}: ";
@@ -423,115 +309,133 @@ class Application
     }
 
     /**
-     * @param mixed[] $ticket
-     *
-     * @return mixed[]
+     * @return array<mixed[]>
      */
-    public function exportTicketAsTicket(array $ticket): array
+    public function exportTicketsAsTickets(): array
     {
-        $messages = [];
-        $messages[] = $this->exportTicketAsMessage($ticket);
+        $data = $this->fetchAll(<<<SQL
+            SELECT id, date, users_id_recipient, name, content, type, status,
+                   urgency, impact, priority, entities_id, requesttypes_id
+            FROM glpi_tickets
+        SQL);
 
-        $created_at = new \DateTimeImmutable($ticket['date']);
+        $tickets = [];
+        foreach ($data as $ticket) {
+            $messages = [];
+            $messages[] = $this->exportTicketAsMessage($ticket);
 
-        $requester_id = null;
-        $assignee_id = null;
-        $observers_ids = []; // not supported by Bileto yet
+            $created_at = new \DateTimeImmutable($ticket['date']);
 
-        $ticket_users = $this->getApi("/Ticket/{$ticket['id']}/Ticket_User");
-        foreach ($ticket_users as $ticket_user) {
-            // TODO How to handle multiple requesters or assignees?
-            if ($ticket_user['type'] === 1) {
-                $requester_id = strval($ticket_user['users_id']);
-            } elseif ($ticket_user['type'] === 2) {
-                $assignee_id = strval($ticket_user['users_id']);
-            } elseif ($ticket_user['type'] === 3) {
-                $observers_ids[] = strval($ticket_user['users_id']);
+            list(
+                $requester_id,
+                $assignee_id,
+            ) = $this->fetchTicketActors($ticket);
+
+            if ($ticket['type'] === 1) {
+                $type = 'incident';
+            } else {
+                $type = 'request';
             }
-        }
 
-        if ($ticket['type'] === 1) {
-            $type = 'incident';
-        } else {
-            $type = 'request';
-        }
+            if ($ticket['status'] === 1) {
+                $status = 'new';
+            } elseif ($ticket['status'] === 2) {
+                $status = 'in_progress';
+            } elseif ($ticket['status'] === 3) {
+                $status = 'planned';
+            } elseif ($ticket['status'] === 4) {
+                $status = 'pending';
+            } elseif ($ticket['status'] === 5) {
+                $status = 'resolved';
+            } else {
+                $status = 'closed';
+            }
 
-        if ($ticket['status'] === 1) {
-            $status = 'new';
-        } elseif ($ticket['status'] === 2) {
-            $status = 'in_progress';
-        } elseif ($ticket['status'] === 3) {
-            $status = 'planned';
-        } elseif ($ticket['status'] === 4) {
-            $status = 'pending';
-        } elseif ($ticket['status'] === 5) {
-            $status = 'resolved';
-        } else {
-            $status = 'closed';
-        }
+            $itil_solutions = $this->fetchAll(<<<SQL
+                SELECT id, status, date_creation, users_id, content
+                FROM glpi_itilsolutions
+                WHERE items_id = :ticket_id
+                AND itemtype = 'Ticket'
+            SQL, [
+                ':ticket_id' => $ticket['id'],
+            ]);
 
-        $itil_solutions = $this->getApi("/Ticket/{$ticket['id']}/ITILSolution");
-        $itil_solution = ArrayHelper::find($itil_solutions, function (array $itil_solution): bool {
-            return $itil_solution['status'] === 3; // TODO get pending solution?
-        });
-        $solution_id = null;
-        if ($itil_solution) {
-            $solution_id = 'solution-' . $itil_solution['id'];
-        }
+            $itil_solution = ArrayHelper::find($itil_solutions, function (array $itil_solution): bool {
+                return $itil_solution['status'] === 2 || $itil_solution['status'] === 3;
+            });
+            $solution_id = null;
+            if ($itil_solution) {
+                $solution_id = 'solution-' . $itil_solution['id'];
+            }
 
-        foreach ($itil_solutions as $itil_solution) {
-            $messages[] = $this->exportItilSolutionAsMessage($itil_solution);
-        }
+            foreach ($itil_solutions as $itil_solution) {
+                $messages[] = $this->exportItilSolutionAsMessage($itil_solution);
+            }
 
-        // TODO load PluginProjectbridgeTicket instead?
-        $project_tasks = $this->getApi("/Ticket/{$ticket['id']}/ProjectTask");
-        $contract_ids = [];
-        foreach ($project_tasks as $project_task) {
-            $contract_ids[] = strval($project_task['id']);
-        }
+            // TODO load PluginProjectbridgeTicket instead?
+            $ticket_project_tasks = $this->fetchAll(<<<SQL
+                SELECT projecttasks_id
+                FROM glpi_projecttasks_tickets
+                WHERE tickets_id = :ticket_id
+            SQL, [
+                ':ticket_id' => $ticket['id'],
+            ]);
+            $contract_ids = array_map(function (array $ticket_project_task): string {
+                return strval($ticket_project_task['projecttasks_id']);
+            }, $ticket_project_tasks);
 
-        $contract_id = $contract_ids[0] ?? null;
+            $contract_id = $contract_ids[0] ?? null;
 
-        $ticket_tasks = $this->getApi("/Ticket/{$ticket['id']}/TicketTask");
-        $time_spents = [];
-        foreach ($ticket_tasks as $ticket_task) {
-            $task_created_at = new \DateTimeImmutable($ticket_task['date']);
-            $time = intval($ticket_task['actiontime'] / 60);
+            $ticket_tasks = $this->fetchAll(<<<SQL
+                SELECT id, date, actiontime, users_id, is_private, content
+                FROM glpi_tickettasks
+                WHERE tickets_id = :ticket_id
+            SQL, [
+                ':ticket_id' => $ticket['id'],
+            ]);
 
-            $time_spents[] = [
-                'createdAt' => $task_created_at->format(\DateTimeInterface::RFC3339),
-                'createdById' => strval($ticket_task['users_id']),
-                'time' => $time,
-                'realTime' => $time,
-                'contractId' => $contract_id,
+            $time_spents = [];
+            foreach ($ticket_tasks as $ticket_task) {
+                $time_spent = $this->exportTicketTaskAsTimeSpent($ticket_task);
+                $time_spent['contractId'] = $contract_id;
+                $time_spents[] = $time_spent;
+
+                $messages[] = $this->exportTicketTaskAsMessage($ticket_task);
+            }
+
+            $itil_followups = $this->fetchAll(<<<SQL
+                SELECT id, date, users_id, is_private, content, requesttypes_id
+                FROM glpi_itilfollowups
+                WHERE itemtype = 'Ticket'
+                AND items_id = :ticket_id
+            SQL, [
+                ':ticket_id' => $ticket['id'],
+            ]);
+            foreach ($itil_followups as $itil_followup) {
+                $messages[] = $this->exportItilFollowupAsMessage($itil_followup);
+            }
+
+            $tickets[] = [
+                'id' => strval($ticket['id']),
+                'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
+                'createdById' => strval($ticket['users_id_recipient']),
+                'type' => $type,
+                'status' => $status,
+                'title' => $ticket['name'],
+                'urgency' => $this->getWeight($ticket['urgency']),
+                'impact' => $this->getWeight($ticket['impact']),
+                'priority' => $this->getWeight($ticket['priority']),
+                'requesterId' => $requester_id,
+                'assigneeId' => $assignee_id,
+                'organizationId' => strval($ticket['entities_id']),
+                'solutionId' => $solution_id,
+                'contractIds' => $contract_ids,
+                'timeSpents' => $time_spents,
+                'messages' => $messages,
             ];
-
-            $messages[] = $this->exportTicketTaskAsMessage($ticket_task);
         }
 
-        $itil_followups = $this->getApi("/Ticket/{$ticket['id']}/ITILFollowup");
-        foreach ($itil_followups as $itil_followup) {
-            $messages[] = $this->exportItilFollowupAsMessage($itil_followup);
-        }
-
-        return [
-            'id' => strval($ticket['id']),
-            'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => strval($ticket['users_id_recipient']),
-            'type' => $type,
-            'status' => $status,
-            'title' => $ticket['name'],
-            'urgency' => $this->getWeight($ticket['urgency']),
-            'impact' => $this->getWeight($ticket['impact']),
-            'priority' => $this->getWeight($ticket['priority']),
-            'requesterId' => $requester_id,
-            'assigneeId' => $assignee_id,
-            'organizationId' => strval($ticket['entities_id']),
-            'solutionId' => $solution_id,
-            'contractIds' => $contract_ids,
-            'timeSpents' => $time_spents,
-            'messages' => $messages,
-        ];
+        return $tickets;
     }
 
     /**
@@ -542,15 +446,8 @@ class Application
     public function exportTicketAsMessage(array $ticket): array
     {
         $created_at = new \DateTimeImmutable($ticket['date']);
-
-        $request_types = $this->getApi("/Ticket/{$ticket['id']}/RequestType");
-        $via = 'webapp';
-        if (count($request_types) > 1 && $request_types[0]['name'] === 'Email') {
-            // TODO don't work
-            $via = 'email';
-        }
-
-        $document_items = $this->getApi("/Ticket/{$ticket['id']}/Document_Item");
+        $via = $this->fetchVia($ticket['requesttypes_id']);
+        $document_items = $this->fetchDocumentItems('Ticket', $ticket['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
 
         return [
@@ -572,8 +469,7 @@ class Application
     public function exportItilSolutionAsMessage(array $itil_solution): array
     {
         $created_at = new \DateTimeImmutable($itil_solution['date_creation']);
-
-        $document_items = $this->getApi("/ITILSolution/{$itil_solution['id']}/Document_Item");
+        $document_items = $this->fetchDocumentItems('ITILSolution', $itil_solution['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
 
         return [
@@ -592,11 +488,27 @@ class Application
      *
      * @return mixed[]
      */
+    public function exportTicketTaskAsTimeSpent(array $ticket_task): array
+    {
+        $task_created_at = new \DateTimeImmutable($ticket_task['date']);
+        $time = intval($ticket_task['actiontime'] / 60);
+        return [
+            'createdAt' => $task_created_at->format(\DateTimeInterface::RFC3339),
+            'createdById' => strval($ticket_task['users_id']),
+            'time' => $time,
+            'realTime' => $time,
+        ];
+    }
+
+    /**
+     * @param mixed[] $ticket_task
+     *
+     * @return mixed[]
+     */
     public function exportTicketTaskAsMessage(array $ticket_task): array
     {
         $created_at = new \DateTimeImmutable($ticket_task['date']);
-
-        $document_items = $this->getApi("/TicketTask/{$ticket_task['id']}/Document_Item");
+        $document_items = $this->fetchDocumentItems('TicketTask', $ticket_task['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
 
         return [
@@ -618,15 +530,8 @@ class Application
     public function exportItilFollowupAsMessage(array $itil_followup): array
     {
         $created_at = new \DateTimeImmutable($itil_followup['date']);
-
-        $request_types = $this->getApi("/ITILFollowup/{$itil_followup['id']}/RequestType");
-        $via = 'webapp';
-        if (count($request_types) > 1 && $request_types[0]['name'] === 'Email') {
-            // TODO don't work
-            $via = 'email';
-        }
-
-        $document_items = $this->getApi("/ITILFollowup/{$itil_followup['id']}/Document_Item");
+        $via = $this->fetchVia($itil_followup['requesttypes_id']);
+        $document_items = $this->fetchDocumentItems('ITILFollowup', $itil_followup['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
 
         return [
@@ -650,7 +555,20 @@ class Application
         $message_documents = [];
 
         foreach ($document_items as $document_item) {
-            $document = $this->getApi("/Document/{$document_item['documents_id']}");
+            $document = $this->fetchOne(<<<SQL
+                SELECT name, filepath
+                FROM glpi_documents
+                WHERE id = :document_id
+            SQL, [
+                ':document_id' => $document_item['documents_id'],
+            ]);
+
+            if (!$document) {
+                echo "[Warning] Document {$document_item['documents_id']} doesn't exist ";
+                echo "(referenced by document_item {$document_item['id']})\n";
+                continue;
+            }
+
             $message_documents[] = [
                 'name' => $document['name'],
                 'filepath' => $document['filepath'],
@@ -672,23 +590,132 @@ class Application
     }
 
     /**
-     * @param array<string, mixed> $parameters
-     * @return mixed[]
+     * @param array<string, mixed> $ticket
+     *
+     * @return array{?string, ?string}
      */
-    private function getApi(string $endpoint, array $parameters = []): array
+    private function fetchTicketActors(array $ticket): array
     {
-        $url = $this->url_api . $endpoint;
-        list($code, $response) = $this->http->get($url, $parameters);
+        $requester_id = null;
+        $assignee_id = null;
 
-        if ($code !== 200 && $code !== 206) {
-            throw new \Exception("Cannot get URL {$url}: code {$code}\n{$response}");
+        $ticket_users = $this->fetchAll(<<<SQL
+            SELECT type, users_id
+            FROM glpi_tickets_users
+            WHERE tickets_id = :ticket_id
+        SQL, [
+            ':ticket_id' => $ticket['id'],
+        ]);
+
+        $requester = ArrayHelper::find($ticket_users, function (array $ticket_user): bool {
+            return $ticket_user['type'] === 1;
+        });
+        if ($requester) {
+            $requester_id = strval($requester['users_id']);
         }
 
-        $data = json_decode($response, true);
-        if (!is_array($data)) {
-            throw new \Exception("Cannot get URL {$url}: invalid JSON\n{$response}");
+        $assignee = ArrayHelper::find($ticket_users, function (array $ticket_user): bool {
+            return $ticket_user['type'] === 2;
+        });
+        if ($assignee) {
+            $assignee_id = strval($assignee['users_id']);
         }
 
-        return $data;
+        return [$requester_id, $assignee_id];
+    }
+
+    /**
+     * @return array<array<string, mixed>>
+     */
+    private function fetchDocumentItems(string $item_type, int $item_id): array
+    {
+        return $this->fetchAll(<<<SQL
+            SELECT id, documents_id
+            FROM glpi_documents_items
+            WHERE itemtype = :item_type
+            AND items_id = :item_id
+        SQL, [
+            ':item_type' => $item_type,
+            ':item_id' => $item_id,
+        ]);
+    }
+
+    private function fetchVia(int $request_type_id): string
+    {
+        $request_type = $this->fetchColumn(<<<SQL
+            SELECT name
+            FROM glpi_requesttypes
+            WHERE id = :request_type_id
+        SQL, [
+            ':request_type_id' => $request_type_id,
+        ]);
+
+        $request_type = strtolower($request_type);
+        if ($request_type === 'email' || $request_type === 'e-mail') {
+            return 'email';
+        } else {
+            return 'webapp';
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $parameters
+     *
+     * @return array<array<string, mixed>>
+     */
+    private function fetchAll(string $sql, array $parameters = []): array
+    {
+        $statement = $this->database->prepare($sql);
+        $statement->execute($parameters);
+        return $statement->fetchAll();
+    }
+
+    /**
+     * @param array<string, mixed> $parameters
+     *
+     * @return array<mixed, array<string, mixed>>
+     */
+    private function fetchIndexed(string $sql, array $parameters = []): array
+    {
+        $statement = $this->database->prepare($sql);
+        $statement->execute($parameters);
+        return $statement->fetchAll(\PDO::FETCH_UNIQUE);
+    }
+
+    /**
+     * @param array<string, mixed> $parameters
+     *
+     * @return array<mixed, mixed>
+     */
+    private function fetchKeyValue(string $sql, array $parameters = []): array
+    {
+        $statement = $this->database->prepare($sql);
+        $statement->execute($parameters);
+        return $statement->fetchAll(\PDO::FETCH_KEY_PAIR);
+    }
+
+    /**
+     * @param array<string, mixed> $parameters
+     *
+     * @return array<string, mixed>|null
+     */
+    private function fetchOne(string $sql, array $parameters = []): ?array
+    {
+        $results = $this->fetchAll($sql, $parameters);
+        if ($results) {
+            return $results[0];
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $parameters
+     */
+    private function fetchColumn(string $sql, array $parameters = []): mixed
+    {
+        $statement = $this->database->prepare($sql);
+        $statement->execute($parameters);
+        return $statement->fetchColumn();
     }
 }

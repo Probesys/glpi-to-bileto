@@ -15,9 +15,7 @@ assert($app_path !== false);
 
 include $app_path . '/autoload.php';
 
-$application = new \App\Application([
-    'app_path' => $app_path,
-]);
+$application = new \App\Application($app_path);
 
 $result = $application->execute($argv);
 echo "\n";
