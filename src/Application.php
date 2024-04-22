@@ -107,7 +107,7 @@ class Application
      */
     public function exportEntitiesAsOrganizations(): array
     {
-        $data = $this->fetchAll(<<<SQL
+        $data = $this->database->fetchAll(<<<SQL
             SELECT id, completename
             FROM glpi_entities
         SQL);
@@ -138,7 +138,7 @@ class Application
      */
     public function exportProfilesAsRoles(): array
     {
-        $data = $this->fetchAll(<<<SQL
+        $data = $this->database->fetchAll(<<<SQL
             SELECT id, name, comment
             FROM glpi_profiles
         SQL);
@@ -163,7 +163,7 @@ class Application
      */
     public function exportUsersAsUsers(): array
     {
-        $data = $this->fetchAll(<<<SQL
+        $data = $this->database->fetchAll(<<<SQL
             SELECT id, name, realname, firstname, entities_id, user_dn
             FROM glpi_users
         SQL);
@@ -171,7 +171,7 @@ class Application
         $users = [];
 
         foreach ($data as $user) {
-            $email = $this->fetchColumn(<<<SQL
+            $email = $this->database->fetchValue(<<<SQL
                 SELECT email
                 FROM glpi_useremails
                 WHERE users_id = :user_id
@@ -199,7 +199,7 @@ class Application
                 $ldap_identifier = $user['name'];
             }
 
-            $user_profiles = $this->fetchAll(<<<SQL
+            $user_profiles = $this->database->fetchAll(<<<SQL
                 SELECT profiles_id, entities_id
                 FROM glpi_profiles_users
                 WHERE users_id = :user_id
@@ -236,22 +236,22 @@ class Application
      */
     public function exportProjectTasksAsContracts(): array
     {
-        $contracts_by_ids = $this->fetchIndexed(<<<SQL
+        $contracts_by_ids = $this->database->fetchIndexed(<<<SQL
             SELECT id, notice, comment, entities_id
             FROM glpi_contracts
         SQL);
 
-        $projects_by_ids = $this->fetchIndexed(<<<SQL
+        $projects_by_ids = $this->database->fetchIndexed(<<<SQL
             SELECT id, name
             FROM glpi_projects
         SQL);
 
-        $projects_to_contracts = $this->fetchKeyValue(<<<SQL
+        $projects_to_contracts = $this->database->fetchKeyValue(<<<SQL
             SELECT project_id, contract_id
             FROM glpi_plugin_projectbridge_contracts
         SQL);
 
-        $data = $this->fetchAll(<<<SQL
+        $data = $this->database->fetchAll(<<<SQL
             SELECT id, projects_id, plan_start_date, plan_end_date, name, planned_duration
             FROM glpi_projecttasks
         SQL);
@@ -313,7 +313,7 @@ class Application
      */
     public function exportTicketsAsTickets(): array
     {
-        $data = $this->fetchAll(<<<SQL
+        $data = $this->database->fetchAll(<<<SQL
             SELECT id, date, users_id_recipient, name, content, type, status,
                    urgency, impact, priority, entities_id, requesttypes_id
             FROM glpi_tickets
@@ -351,7 +351,7 @@ class Application
                 $status = 'closed';
             }
 
-            $itil_solutions = $this->fetchAll(<<<SQL
+            $itil_solutions = $this->database->fetchAll(<<<SQL
                 SELECT id, status, date_creation, users_id, content
                 FROM glpi_itilsolutions
                 WHERE items_id = :ticket_id
@@ -373,7 +373,7 @@ class Application
             }
 
             // TODO load PluginProjectbridgeTicket instead?
-            $ticket_project_tasks = $this->fetchAll(<<<SQL
+            $ticket_project_tasks = $this->database->fetchAll(<<<SQL
                 SELECT projecttasks_id
                 FROM glpi_projecttasks_tickets
                 WHERE tickets_id = :ticket_id
@@ -386,7 +386,7 @@ class Application
 
             $contract_id = $contract_ids[0] ?? null;
 
-            $ticket_tasks = $this->fetchAll(<<<SQL
+            $ticket_tasks = $this->database->fetchAll(<<<SQL
                 SELECT id, date, actiontime, users_id, is_private, content
                 FROM glpi_tickettasks
                 WHERE tickets_id = :ticket_id
@@ -403,7 +403,7 @@ class Application
                 $messages[] = $this->exportTicketTaskAsMessage($ticket_task);
             }
 
-            $itil_followups = $this->fetchAll(<<<SQL
+            $itil_followups = $this->database->fetchAll(<<<SQL
                 SELECT id, date, users_id, is_private, content, requesttypes_id
                 FROM glpi_itilfollowups
                 WHERE itemtype = 'Ticket'
@@ -555,7 +555,7 @@ class Application
         $message_documents = [];
 
         foreach ($document_items as $document_item) {
-            $document = $this->fetchOne(<<<SQL
+            $documents = $this->database->fetchAll(<<<SQL
                 SELECT name, filepath
                 FROM glpi_documents
                 WHERE id = :document_id
@@ -563,15 +563,15 @@ class Application
                 ':document_id' => $document_item['documents_id'],
             ]);
 
-            if (!$document) {
+            if (!$documents) {
                 echo "[Warning] Document {$document_item['documents_id']} doesn't exist ";
                 echo "(referenced by document_item {$document_item['id']})\n";
                 continue;
             }
 
             $message_documents[] = [
-                'name' => $document['name'],
-                'filepath' => $document['filepath'],
+                'name' => $documents[0]['name'],
+                'filepath' => $documents[0]['filepath'],
             ];
         }
 
@@ -599,7 +599,7 @@ class Application
         $requester_id = null;
         $assignee_id = null;
 
-        $ticket_users = $this->fetchAll(<<<SQL
+        $ticket_users = $this->database->fetchAll(<<<SQL
             SELECT type, users_id
             FROM glpi_tickets_users
             WHERE tickets_id = :ticket_id
@@ -629,7 +629,7 @@ class Application
      */
     private function fetchDocumentItems(string $item_type, int $item_id): array
     {
-        return $this->fetchAll(<<<SQL
+        return $this->database->fetchAll(<<<SQL
             SELECT id, documents_id
             FROM glpi_documents_items
             WHERE itemtype = :item_type
@@ -642,7 +642,7 @@ class Application
 
     private function fetchVia(int $request_type_id): string
     {
-        $request_type = $this->fetchColumn(<<<SQL
+        $request_type = $this->database->fetchValue(<<<SQL
             SELECT name
             FROM glpi_requesttypes
             WHERE id = :request_type_id
@@ -656,66 +656,5 @@ class Application
         } else {
             return 'webapp';
         }
-    }
-
-    /**
-     * @param array<string, mixed> $parameters
-     *
-     * @return array<array<string, mixed>>
-     */
-    private function fetchAll(string $sql, array $parameters = []): array
-    {
-        $statement = $this->database->prepare($sql);
-        $statement->execute($parameters);
-        return $statement->fetchAll();
-    }
-
-    /**
-     * @param array<string, mixed> $parameters
-     *
-     * @return array<mixed, array<string, mixed>>
-     */
-    private function fetchIndexed(string $sql, array $parameters = []): array
-    {
-        $statement = $this->database->prepare($sql);
-        $statement->execute($parameters);
-        return $statement->fetchAll(\PDO::FETCH_UNIQUE);
-    }
-
-    /**
-     * @param array<string, mixed> $parameters
-     *
-     * @return array<mixed, mixed>
-     */
-    private function fetchKeyValue(string $sql, array $parameters = []): array
-    {
-        $statement = $this->database->prepare($sql);
-        $statement->execute($parameters);
-        return $statement->fetchAll(\PDO::FETCH_KEY_PAIR);
-    }
-
-    /**
-     * @param array<string, mixed> $parameters
-     *
-     * @return array<string, mixed>|null
-     */
-    private function fetchOne(string $sql, array $parameters = []): ?array
-    {
-        $results = $this->fetchAll($sql, $parameters);
-        if ($results) {
-            return $results[0];
-        } else {
-            return null;
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $parameters
-     */
-    private function fetchColumn(string $sql, array $parameters = []): mixed
-    {
-        $statement = $this->database->prepare($sql);
-        $statement->execute($parameters);
-        return $statement->fetchColumn();
     }
 }

@@ -1,5 +1,9 @@
 <?php
 
+// This file is part of GLPI To Bileto.
+// Copyright 2024 Probesys
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 namespace App;
 
 /**
@@ -10,9 +14,6 @@ namespace App;
  *     'username': string,
  *     'password': string,
  * }
- *
- * @author Marien Fressinaud <dev@marienfressinaud.fr>
- * @license http://www.gnu.org/licenses/agpl-3.0.en.html AGPL
  */
 class Database
 {
@@ -61,158 +62,72 @@ class Database
     }
 
     /**
-     * @see \PDO::beginTransaction https://www.php.net/manual/pdo.begintransaction.php
-     */
-    public function beginTransaction(): bool
-    {
-        /** @var bool $result */
-        $result = $this->pdoCall('beginTransaction');
-        return $result;
-    }
-
-    /**
-     * @see \PDO::commit https://www.php.net/manual/pdo.commit.php
-     */
-    public function commit(): bool
-    {
-        /** @var bool $result */
-        $result = $this->pdoCall('commit');
-        return $result;
-    }
-
-    /**
-     * @see \PDO::errorCode https://www.php.net/manual/pdo.errorcode.php
-     */
-    public function errorCode(): ?string
-    {
-        /** @var ?string $result */
-        $result = $this->pdoCall('errorCode');
-        return $result;
-    }
-
-    /**
-     * @see \PDO::errorInfo https://www.php.net/manual/pdo.errorinfo.php
-     *
-     * @return array{
-     *     0: string,
-     *     1: ?string,
-     *     2: string,
-     * }
-     */
-    public function errorInfo(): array
-    {
-        /** @var array{
-         *     0: string,
-         *     1: ?string,
-         *     2: string,
-         * } $result
-        */
-        $result = $this->pdoCall('errorInfo');
-        return $result;
-    }
-
-    /**
-     * @see \PDO::exec() https://www.php.net/manual/pdo.exec.php
-     */
-    public function exec(string $sql_statement): int
-    {
-        /** @var int $result */
-        $result = $this->pdoCall('exec', $sql_statement);
-        return $result;
-    }
-
-    /**
-     * @see \PDO::getAttribute() https://www.php.net/manual/pdo.getattribute.php
-     *
-     * @param \PDO::ATTR_* $attribute
-     */
-    public function getAttribute(int $attribute): mixed
-    {
-        return $this->pdoCall('getAttribute', $attribute);
-    }
-
-    /**
-     * @see \PDO::inTransaction() https://www.php.net/manual/pdo.intransaction.php
-     */
-    public function inTransaction(): bool
-    {
-        /** @var bool $result */
-        $result = $this->pdoCall('inTransaction');
-        return $result;
-    }
-
-    /**
-     * @see \PDO::lastInsertId() https://www.php.net/manual/pdo.lastinsertid.php
-     */
-    public function lastInsertId(?string $name = null): string
-    {
-        /** @var string $result */
-        $result = $this->pdoCall('lastInsertId', $name);
-        return $result;
-    }
-
-    /**
      * @see \PDO::prepare() https://www.php.net/manual/pdo.prepare.php
      *
      * @param mixed[] $options
      */
     public function prepare(string $sql_statement, array $options = []): \PDOStatement
     {
-        /** @var \PDOStatement $result */
-        $result = $this->pdoCall('prepare', $sql_statement, $options);
-        return $result;
+        assert($this->pdo_connection !== null);
+
+        return $this->pdo_connection->prepare($sql_statement, $options);
     }
 
     /**
-     * @see \PDO::query() https://www.php.net/manual/pdo.query.php
+     * Fetch all the data corresponding to the given SQL request.
+     *
+     * @param array<string, mixed> $parameters
+     *
+     * @return array<array<string, mixed>>
      */
-    public function query(string $sql_statement, ?int $fetch_mode = null): \PDOStatement
+    public function fetchAll(string $sql, array $parameters = []): array
     {
-        /** @var \PDOStatement $result */
-        $result = $this->pdoCall('query', $sql_statement, $fetch_mode);
-        return $result;
+        $statement = $this->prepare($sql);
+        $statement->execute($parameters);
+        return $statement->fetchAll();
     }
 
     /**
-     * @see \PDO::quote https://www.php.net/manual/pdo.quote.php
+     * Fetch the data corresponding to the given SQL request. The results are
+     * indexed by the first selected column.
+     *
+     * @param array<string, mixed> $parameters
+     *
+     * @return array<mixed, array<string, mixed>>
      */
-    public function quote(string $string, int $parameter_type = \PDO::PARAM_STR): string
+    public function fetchIndexed(string $sql, array $parameters = []): array
     {
-        /** @var string $result */
-        $result = $this->pdoCall('quote', $string, $parameter_type);
-        return $result;
+        $statement = $this->prepare($sql);
+        $statement->execute($parameters);
+        return $statement->fetchAll(\PDO::FETCH_UNIQUE);
     }
 
     /**
-     * @see \PDO::rollBack https://www.php.net/manual/pdo.rollback.php
+     * Fetch the data corresponding to the given SQL request. You must select
+     * two columns: the first is used as key of the returned array.
+     *
+     * @param array<string, mixed> $parameters
+     *
+     * @return array<mixed, mixed>
      */
-    public function rollBack(): bool
+    public function fetchKeyValue(string $sql, array $parameters = []): array
     {
-        /** @var bool $result */
-        $result = $this->pdoCall('rollBack');
-        return $result;
+        $statement = $this->prepare($sql);
+        $statement->execute($parameters);
+        return $statement->fetchAll(\PDO::FETCH_KEY_PAIR);
     }
 
     /**
-     * @see \PDO::setAttribute() https://www.php.net/manual/pdo.setattribute.php
+     * Fetch a single value corresponding to the SQL request. You must select
+     * one column for a single result (e.g. selecting the "name" column of a
+     * specific "id").
+     *
+     * @param array<string, mixed> $parameters
      */
-    public function setAttribute(int $attribute, mixed $value): bool
+    public function fetchValue(string $sql, array $parameters = []): mixed
     {
-        /** @var bool $result */
-        $result = $this->pdoCall('setAttribute', $attribute, $value);
-        return $result;
-    }
-
-    /**
-     * Transfer method calls to the PDO connection. It starts the connection if
-     * it has been stopped.
-     */
-    public function pdoCall(string $name, mixed ...$arguments): mixed
-    {
-        if (!is_callable([$this->pdo_connection, $name])) {
-            throw new \BadMethodCallException('Call to undefined method ' . get_called_class() . '::' . $name);
-        }
-
-        return $this->pdo_connection->$name(...$arguments);
+        $statement = $this->prepare($sql);
+        $statement->execute($parameters);
+        return $statement->fetchColumn();
     }
 }
