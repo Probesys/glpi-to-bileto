@@ -125,6 +125,12 @@ class Dotenv
      *
      * Note that variables defined in the global environment have the priority
      * over the values defined in the env file.
+     *
+     * @template T of ?string
+     *
+     * @param T $default
+     *
+     * @return string|T
      */
     public function pop(string $name, ?string $default = null): ?string
     {
