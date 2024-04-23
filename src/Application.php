@@ -318,6 +318,18 @@ class Application
 
             $name = $project['name'] . ' - ' . $project_task['name'];
 
+            $hours_alert = $this->database->fetchValue(<<<SQL
+                SELECT quotaAlert
+                FROM glpi_plugin_projectbridge_contracts_quotaAlert
+                WHERE contract_id = :contract_id
+            SQL, [
+                ':contract_id' => $contract_id,
+            ]);
+
+            if (!$hours_alert) {
+                $hours_alert = 80;
+            }
+
             $contracts[] = [
                 'id' => strval($project_task['id']),
                 'name' => $name,
@@ -327,7 +339,7 @@ class Application
                 'notes' => $contract['comment'],
                 'organizationId' => strval($contract['entities_id']),
                 'timeAccountingUnit' => 30,
-                'hoursAlert' => 80, // TODO import from project bridge
+                'hoursAlert' => $hours_alert,
                 'dateAlert' => $date_alert,
             ];
         }
