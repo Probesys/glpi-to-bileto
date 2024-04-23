@@ -10,6 +10,16 @@ class Application
 {
     private Database $database;
 
+    /**
+     * @var array{
+     *     'merge organizations': bool,
+     * } $options
+     */
+    private array $options;
+
+    /** @var array<int, string> */
+    private array $entities_to_orgas;
+
     public function __construct(string $app_path)
     {
         $dotenv = new Dotenv("{$app_path}/.env");
@@ -30,10 +40,18 @@ class Application
      */
     public function execute(array $arguments): int
     {
+        $this->options = [
+            'merge organizations' => false,
+        ];
+
+        $this->entities_to_orgas = [];
+
         foreach ($arguments as $argument) {
             if ($argument === '--help' || $argument === '-h') {
                 echo $this->usage();
                 return 0;
+            } elseif ($argument === '--merge-organizations') {
+                $this->options['merge organizations'] = true;
             } else {
                 echo "Unrecognized option: {$argument}\n\n";
                 echo $this->usage();
@@ -114,6 +132,7 @@ class Application
 
         Options:
           --help -h                  display this help message
+          --merge-organizations      merge the organizations having the same name
         TEXT;
     }
 
@@ -125,26 +144,30 @@ class Application
     public function exportEntitiesAsOrganizations(): array
     {
         $data = $this->database->fetchAll(<<<SQL
-            SELECT id, completename
+            SELECT id, name
             FROM glpi_entities
         SQL);
 
         $organizations = [];
+        $names_to_ids = [];
 
         foreach ($data as $entity) {
-            $name = $entity['completename'];
+            $entity_id = intval($entity['id']);
+            $organization_id = strval($entity_id);
+            $name = $entity['name'];
 
-            $pos_separator = strpos($name, '>');
-            if ($pos_separator !== false) {
-                // Remove the "Root entity" name from the beginning of other
-                // entities names.
-                $name = trim(substr($name, $pos_separator + 1));
+            if ($this->options['merge organizations'] && isset($names_to_ids[$name])) {
+                $organization_id = $names_to_ids[$name];
+            } else {
+                $organizations[] = [
+                    'id' => $organization_id,
+                    'name' => $name,
+                ];
+
+                $names_to_ids[$name] = $organization_id;
             }
 
-            $organizations[] = [
-                'id' => strval($entity['id']),
-                'name' => $name,
-            ];
+            $this->entities_to_orgas[$entity_id] = $organization_id;
         }
 
         return $organizations;
@@ -237,7 +260,7 @@ class Application
 
                 $authorizations[] = [
                     'roleId' => strval($user_profile['profiles_id']),
-                    'organizationId' => strval($user_profile['entities_id']),
+                    'organizationId' => $this->getOrganizationId($user_profile['entities_id']),
                 ];
             }
 
@@ -247,7 +270,7 @@ class Application
                 'locale' => 'fr_FR',
                 'name' => $name,
                 'ldapIdentifier' => $ldap_identifier,
-                'organizationId' => strval($user['entities_id']),
+                'organizationId' => $this->getOrganizationId($user['entities_id']),
                 'authorizations' => $authorizations,
             ];
         }
@@ -340,7 +363,7 @@ class Application
                 'endAt' => $end_at->format(\DateTimeInterface::RFC3339),
                 'maxHours' => intval($project_task['planned_duration'] / 60 / 60),
                 'notes' => $contract['comment'],
-                'organizationId' => strval($contract['entities_id']),
+                'organizationId' => $this->getOrganizationId($contract['entities_id']),
                 'timeAccountingUnit' => 30,
                 'hoursAlert' => $hours_alert,
                 'dateAlert' => $date_alert,
@@ -471,7 +494,7 @@ class Application
                 'priority' => $this->getWeight($ticket['priority']),
                 'requesterId' => $requester_id,
                 'assigneeId' => $assignee_id,
-                'organizationId' => strval($ticket['entities_id']),
+                'organizationId' => $this->getOrganizationId($ticket['entities_id']),
                 'solutionId' => $solution_id,
                 'contractIds' => $contract_ids,
                 'timeSpents' => $time_spents,
@@ -648,6 +671,20 @@ class Application
         } else {
             return 'medium';
         }
+    }
+
+    /**
+     * Return the (Bileto) organization id corresponding to the given (GLPI) entity id.
+     *
+     * It is especially useful when organizations are merged by names.
+     */
+    private function getOrganizationId(int $entity_id): string
+    {
+        if (!isset($this->entities_to_orgas[$entity_id])) {
+            throw new \RuntimeException("Entity {$entity_id} does not exist.");
+        }
+
+        return $this->entities_to_orgas[$entity_id];
     }
 
     /**
