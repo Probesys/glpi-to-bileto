@@ -681,7 +681,11 @@ class Application
     private function getOrganizationId(int $entity_id): string
     {
         if (!isset($this->entities_to_orgas[$entity_id])) {
-            throw new \RuntimeException("Entity {$entity_id} does not exist.");
+            echo "[Warning] Entity {$entity_id} does not exist.\n";
+
+            $organization_id = strval($entity_id);
+            $this->entities_to_orgas[$entity_id] = $organization_id;
+            return $organization_id;
         }
 
         return $this->entities_to_orgas[$entity_id];
