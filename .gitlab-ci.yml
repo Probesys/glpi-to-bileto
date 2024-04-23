@@ -1,0 +1,23 @@
+image: docker:latest
+
+services:
+  - docker:dind
+
+cache:
+  paths:
+    - vendor/
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+
+variables:
+  DOCKER_DRIVER: overlay2
+
+test:
+  stage: test
+  script:
+    - apk update && apk add make
+    - make docker-build
+    - make install
+    - make lint
