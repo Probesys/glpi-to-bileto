@@ -24,7 +24,7 @@ class Application
     }
 
     /**
-     * Create a Request reading the CLI arguments.
+     * Execute the command with args coming from the command line.
      *
      * @param non-empty-list<string> $arguments
      */
@@ -60,17 +60,18 @@ class Application
             }
             echo "OK\n";
         } catch (\Exception $e) {
-            echo $e->getMessage();
+            echo '[Error] ' . $e->getMessage();
             return -2;
         }
 
-        echo "Generationg the archive…\n";
+        echo "Generating the archive…\n";
         $files = [];
         foreach ($glpi_data as $name => $data) {
             $json = json_encode($data, JSON_PRETTY_PRINT);
 
             if ($json === false) {
-                throw new \Exception('Cannot encode an array to JSON');
+                echo '[Error] Cannot encode an array to JSON';
+                return -2;
             }
 
             $files["{$name}.json"] = $json;
@@ -95,6 +96,9 @@ class Application
         return 0;
     }
 
+    /**
+     * Return a string explaining how to use the command line.
+     */
     public function usage(): string
     {
         return <<<TEXT
@@ -103,6 +107,8 @@ class Application
     }
 
     /**
+     * Export GLPI Entities to Bileto Organizations.
+     *
      * @return array<mixed[]>
      */
     public function exportEntitiesAsOrganizations(): array
@@ -134,6 +140,8 @@ class Application
     }
 
     /**
+     * Export GLPI Profiles to Bileto Roles.
+     *
      * @return array<mixed[]>
      */
     public function exportProfilesAsRoles(): array
@@ -159,6 +167,8 @@ class Application
     }
 
     /**
+     * Export GLPI Users to Bileto Users.
+     *
      * @return array<mixed[]>
      */
     public function exportUsersAsUsers(): array
@@ -232,6 +242,12 @@ class Application
     }
 
     /**
+     * Export GLPI ProjectTasks to Bileto Contracts.
+     *
+     * Note that it's based on the data produced by our plugin ProjectBridge
+     *
+     * @see https://github.com/Probesys/glpi-plugins-projectbridge
+     *
      * @return array<mixed[]>
      */
     public function exportProjectTasksAsContracts(): array
@@ -309,6 +325,8 @@ class Application
     }
 
     /**
+     * Export GLPI Tickets to Bileto Tickets.
+     *
      * @return array<mixed[]>
      */
     public function exportTicketsAsTickets(): array
@@ -439,6 +457,8 @@ class Application
     }
 
     /**
+     * Export a GLPI Ticket to a Bileto Message.
+     *
      * @param mixed[] $ticket
      *
      * @return mixed[]
@@ -462,6 +482,8 @@ class Application
     }
 
     /**
+     * Export a GLPI ITILSolution to a Bileto Message.
+     *
      * @param mixed[] $itil_solution
      *
      * @return mixed[]
@@ -484,6 +506,8 @@ class Application
     }
 
     /**
+     * Export a GLPI TicketTask to a Bileto SpentTime.
+     *
      * @param mixed[] $ticket_task
      *
      * @return mixed[]
@@ -501,6 +525,8 @@ class Application
     }
 
     /**
+     * Export a GLPI TicketTask to a Bileto Message.
+     *
      * @param mixed[] $ticket_task
      *
      * @return mixed[]
@@ -523,6 +549,8 @@ class Application
     }
 
     /**
+     * Export a GLPI ITILFollowup to a Bileto Message.
+     *
      * @param mixed[] $itil_followup
      *
      * @return mixed[]
@@ -546,6 +574,8 @@ class Application
     }
 
     /**
+     * Export GLPI DocumentItems to Bileto MessageDocuments
+     *
      * @param mixed[] $document_items
      *
      * @return mixed[]
@@ -578,6 +608,11 @@ class Application
         return $message_documents;
     }
 
+    /**
+     * Convert a GLPI weight to a Bileto weight.
+     *
+     * @return 'low'|'medium'|'high'
+     */
     private function getWeight(int $glpi_weight): string
     {
         if ($glpi_weight < 3) {
@@ -590,6 +625,9 @@ class Application
     }
 
     /**
+     * Fetch the actors of a GLPI actors and return the ids of the requester
+     * and the assignee if any.
+     *
      * @param array<string, mixed> $ticket
      *
      * @return array{?string, ?string}
@@ -625,6 +663,10 @@ class Application
     }
 
     /**
+     * Fetch the GLPI DocumentItems of the given item.
+     *
+     * @param 'Ticket'|'ITILSolution'|'TicketTask'|'ITILFollowup' $item_type
+     *
      * @return array<array<string, mixed>>
      */
     private function fetchDocumentItems(string $item_type, int $item_id): array
@@ -640,6 +682,11 @@ class Application
         ]);
     }
 
+    /**
+     * Fetch the given GLPI RequestType and convert it to a Bileto "via".
+     *
+     * @return 'email'|'webapp'
+     */
     private function fetchVia(int $request_type_id): string
     {
         $request_type = $this->database->fetchValue(<<<SQL
