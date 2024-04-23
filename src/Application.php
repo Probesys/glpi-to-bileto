@@ -221,7 +221,7 @@ class Application
             }
 
             $user_profiles = $this->database->fetchAll(<<<SQL
-                SELECT profiles_id, entities_id
+                SELECT id, profiles_id, entities_id, is_recursive
                 FROM glpi_profiles_users
                 WHERE users_id = :user_id
             SQL, [
@@ -230,10 +230,13 @@ class Application
 
             $authorizations = [];
             foreach ($user_profiles as $user_profile) {
+                if ($user_profile['is_recursive']) {
+                    echo "[Warning] Ignoring recursive authorization {$user_profile['id']} of user {$user['id']}\n";
+                    continue;
+                }
+
                 $authorizations[] = [
                     'roleId' => strval($user_profile['profiles_id']),
-                    // TODO set null if entities_id = 0
-                    // TODO handle tree structure?
                     'organizationId' => strval($user_profile['entities_id']),
                 ];
             }
