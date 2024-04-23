@@ -26,13 +26,19 @@ class Application
     /**
      * Execute the command with args coming from the command line.
      *
-     * @param non-empty-list<string> $arguments
+     * @param string[] $arguments
      */
     public function execute(array $arguments): int
     {
-        if (count($arguments) !== 1) {
-            echo $this->usage();
-            return -1;
+        foreach ($arguments as $argument) {
+            if ($argument === '--help' || $argument === '-h') {
+                echo $this->usage();
+                return 0;
+            } else {
+                echo "Unrecognized option: {$argument}\n\n";
+                echo $this->usage();
+                return -1;
+            }
         }
 
         $glpi_data = [];
@@ -102,7 +108,12 @@ class Application
     public function usage(): string
     {
         return <<<TEXT
-        Usage: php bin/glpi-export
+        Usage: php bin/glpi-export [OPTION]
+        Export the data of a GLPI database into a ZIP archive that can be imported into a
+        Bileto server.
+
+        Options:
+          --help -h                  display this help message
         TEXT;
     }
 
