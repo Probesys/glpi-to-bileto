@@ -518,6 +518,7 @@ class Application
         $via = $this->fetchVia($ticket['requesttypes_id']);
         $document_items = $this->fetchDocumentItems('Ticket', $ticket['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
+        $content = html_entity_decode($ticket['content']);
 
         return [
             'id' => "ticket-{$ticket['id']}",
@@ -525,7 +526,7 @@ class Application
             'createdById' => strval($ticket['users_id_recipient']),
             'isConfidential' => false,
             'via' => $via,
-            'content' => $ticket['content'],
+            'content' => $content,
             'messageDocuments' => $message_documents,
         ];
     }
@@ -542,6 +543,7 @@ class Application
         $created_at = new \DateTimeImmutable($itil_solution['date_creation']);
         $document_items = $this->fetchDocumentItems('ITILSolution', $itil_solution['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
+        $content = html_entity_decode($itil_solution['content']);
 
         return [
             'id' => "solution-{$itil_solution['id']}",
@@ -549,7 +551,7 @@ class Application
             'createdById' => strval($itil_solution['users_id']),
             'isConfidential' => false,
             'via' => 'webapp',
-            'content' => $itil_solution['content'],
+            'content' => $content,
             'messageDocuments' => $message_documents,
         ];
     }
@@ -585,6 +587,7 @@ class Application
         $created_at = new \DateTimeImmutable($ticket_task['date']);
         $document_items = $this->fetchDocumentItems('TicketTask', $ticket_task['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
+        $content = html_entity_decode($ticket_task['content']);
 
         return [
             'id' => "ticket-task-{$ticket_task['id']}",
@@ -592,7 +595,7 @@ class Application
             'createdById' => strval($ticket_task['users_id']),
             'isConfidential' => $ticket_task['is_private'] === 1,
             'via' => 'webapp',
-            'content' => $ticket_task['content'],
+            'content' => $content,
             'messageDocuments' => $message_documents,
         ];
     }
@@ -610,6 +613,7 @@ class Application
         $via = $this->fetchVia($itil_followup['requesttypes_id']);
         $document_items = $this->fetchDocumentItems('ITILFollowup', $itil_followup['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
+        $content = html_entity_decode($itil_followup['content']);
 
         return [
             'id' => "followup-{$itil_followup['id']}",
@@ -617,7 +621,7 @@ class Application
             'createdById' => strval($itil_followup['users_id']),
             'isConfidential' => $itil_followup['is_private'] === 1,
             'via' => $via,
-            'content' => $itil_followup['content'],
+            'content' => $content,
             'messageDocuments' => $message_documents,
         ];
     }
