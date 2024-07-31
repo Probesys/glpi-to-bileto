@@ -336,6 +336,18 @@ class Application
                 continue;
             }
 
+            if (!isset($project_task['plan_start_date'])) {
+                echo "[Warning] Skipping project task {$project_task['id']}: ";
+                echo "missing plan_start_date\n";
+                continue;
+            }
+
+            if (!isset($project_task['plan_end_date'])) {
+                echo "[Warning] Skipping project task {$project_task['id']}: ";
+                echo "missing plan_end_date\n";
+                continue;
+            }
+
             $contract = $contracts_by_ids[$contract_id];
 
             $start_at = new \DateTimeImmutable($project_task['plan_start_date']);
