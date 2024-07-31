@@ -10,6 +10,8 @@
     "minimum-stability": "stable",
     "require": {
         "php": ">=8.2",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
         "ext-zip": "*"
     },
     "require-dev": {

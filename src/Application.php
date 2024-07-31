@@ -336,6 +336,18 @@ class Application
                 continue;
             }
 
+            if (!isset($project_task['plan_start_date'])) {
+                echo "[Warning] Skipping project task {$project_task['id']}: ";
+                echo "missing plan_start_date\n";
+                continue;
+            }
+
+            if (!isset($project_task['plan_end_date'])) {
+                echo "[Warning] Skipping project task {$project_task['id']}: ";
+                echo "missing plan_end_date\n";
+                continue;
+            }
+
             $contract = $contracts_by_ids[$contract_id];
 
             $start_at = new \DateTimeImmutable($project_task['plan_start_date']);
@@ -436,7 +448,9 @@ class Application
             }
 
             foreach ($itil_solutions as $itil_solution) {
-                $messages[] = $this->exportItilSolutionAsMessage($itil_solution);
+                if (isset($itil_solution['content'])) {
+                    $messages[] = $this->exportItilSolutionAsMessage($itil_solution);
+                }
             }
 
             // TODO load PluginProjectbridgeTicket instead?
@@ -467,7 +481,9 @@ class Application
                 $time_spent['contractId'] = $contract_id;
                 $time_spents[] = $time_spent;
 
-                $messages[] = $this->exportTicketTaskAsMessage($ticket_task);
+                if (isset($ticket_task['content'])) {
+                    $messages[] = $this->exportTicketTaskAsMessage($ticket_task);
+                }
             }
 
             $itil_followups = $this->database->fetchAll(<<<SQL
@@ -479,7 +495,9 @@ class Application
                 ':ticket_id' => $ticket['id'],
             ]);
             foreach ($itil_followups as $itil_followup) {
-                $messages[] = $this->exportItilFollowupAsMessage($itil_followup);
+                if (isset($itil_followup['content'])) {
+                    $messages[] = $this->exportItilFollowupAsMessage($itil_followup);
+                }
             }
 
             $tickets[] = [
@@ -518,7 +536,7 @@ class Application
         $via = $this->fetchVia($ticket['requesttypes_id']);
         $document_items = $this->fetchDocumentItems('Ticket', $ticket['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
-        $content = html_entity_decode($ticket['content']);
+        $content = html_entity_decode($ticket['content'] ?? '');
 
         return [
             'id' => "ticket-{$ticket['id']}",
