@@ -83,6 +83,10 @@ class Application
                 echo "OK\n";
             }
 
+            echo "Getting labels…\n";
+            $glpi_data['labels'] = $this->exportCategoriesAsLabels();
+            echo "OK\n";
+
             echo "Getting tickets…\n";
             $tickets = $this->exportTicketsAsTickets();
             foreach ($tickets as $ticket) {
@@ -393,6 +397,32 @@ class Application
     }
 
     /**
+     * Export GLPI Categories to Bileto Labels.
+     *
+     * @return array<mixed[]>
+     */
+    public function exportCategoriesAsLabels(): array
+    {
+        $data = $this->database->fetchAll(<<<SQL
+            SELECT id, completename, comment
+            FROM glpi_itilcategories
+        SQL);
+
+        $labels = [];
+
+        foreach ($data as $category) {
+            $labels[] = [
+                'id' => strval($category['id']),
+                'name' => $category['completename'],
+                'description' => $category['comment'],
+                'color' => 'grey',
+            ];
+        }
+
+        return $labels;
+    }
+
+    /**
      * Export GLPI Tickets to Bileto Tickets.
      *
      * @return array<mixed[]>
@@ -401,7 +431,8 @@ class Application
     {
         $data = $this->database->fetchAll(<<<SQL
             SELECT id, date, users_id_recipient, name, content, type, status,
-                   urgency, impact, priority, entities_id, requesttypes_id
+                urgency, impact, priority, entities_id, requesttypes_id,
+                itilcategories_id
             FROM glpi_tickets
         SQL);
 
@@ -478,6 +509,11 @@ class Application
 
             $contract_id = $contract_ids[0] ?? null;
 
+            $label_ids = [];
+            if ($ticket['itilcategories_id'] > 0) {
+                $label_ids[] = strval($ticket['itilcategories_id']);
+            }
+
             $ticket_tasks = $this->database->fetchAll(<<<SQL
                 SELECT id, date, actiontime, users_id, is_private, content
                 FROM glpi_tickettasks
@@ -526,6 +562,7 @@ class Application
                 'organizationId' => $this->getOrganizationId($ticket['entities_id']),
                 'solutionId' => $solution_id,
                 'contractIds' => $contract_ids,
+                'labelIds' => $label_ids,
                 'timeSpents' => $time_spents,
                 'messages' => $messages,
             ];
