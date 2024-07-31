@@ -13,6 +13,7 @@ class Application
     /**
      * @var array{
      *     'merge organizations': bool,
+     *     'ignore contracts': bool,
      * } $options
      */
     private array $options;
@@ -42,6 +43,7 @@ class Application
     {
         $this->options = [
             'merge organizations' => false,
+            'ignore contracts' => false,
         ];
 
         $this->entities_to_orgas = [];
@@ -52,6 +54,8 @@ class Application
                 return 0;
             } elseif ($argument === '--merge-organizations') {
                 $this->options['merge organizations'] = true;
+            } elseif ($argument === '--ignore-contracts') {
+                $this->options['ignore contracts'] = true;
             } else {
                 echo "Unrecognized option: {$argument}\n\n";
                 echo $this->usage();
@@ -73,9 +77,11 @@ class Application
             $glpi_data['users'] = $this->exportUsersAsUsers();
             echo "OK\n";
 
-            echo "Getting contracts…\n";
-            $glpi_data['contracts'] = $this->exportProjectTasksAsContracts();
-            echo "OK\n";
+            if (!$this->options['ignore contracts']) {
+                echo "Getting contracts…\n";
+                $glpi_data['contracts'] = $this->exportProjectTasksAsContracts();
+                echo "OK\n";
+            }
 
             echo "Getting tickets…\n";
             $tickets = $this->exportTicketsAsTickets();
@@ -133,6 +139,7 @@ class Application
         Options:
           --help -h                  display this help message
           --merge-organizations      merge the organizations having the same name
+          --ignore-contracts         don’t try to load contracts from ProjectBridge
         TEXT;
     }
 
@@ -453,17 +460,21 @@ class Application
                 }
             }
 
-            // TODO load PluginProjectbridgeTicket instead?
-            $ticket_project_tasks = $this->database->fetchAll(<<<SQL
-                SELECT projecttasks_id
-                FROM glpi_projecttasks_tickets
-                WHERE tickets_id = :ticket_id
-            SQL, [
-                ':ticket_id' => $ticket['id'],
-            ]);
-            $contract_ids = array_map(function (array $ticket_project_task): string {
-                return strval($ticket_project_task['projecttasks_id']);
-            }, $ticket_project_tasks);
+            if ($this->options['ignore contracts']) {
+                $contract_ids = [];
+            } else {
+                // TODO load PluginProjectbridgeTicket instead?
+                $ticket_project_tasks = $this->database->fetchAll(<<<SQL
+                    SELECT projecttasks_id
+                    FROM glpi_projecttasks_tickets
+                    WHERE tickets_id = :ticket_id
+                SQL, [
+                    ':ticket_id' => $ticket['id'],
+                ]);
+                $contract_ids = array_map(function (array $ticket_project_task): string {
+                    return strval($ticket_project_task['projecttasks_id']);
+                }, $ticket_project_tasks);
+            }
 
             $contract_id = $contract_ids[0] ?? null;
 
