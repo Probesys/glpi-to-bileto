@@ -95,6 +95,7 @@ Naive mapping (GLPI → Bileto):
 - User + UserEmail → User
   - Profile\_User → Authorization
 - ProjectTask + PluginProjectbridgeContract + PluginProjectbridgeContractQuotaAlert + Project + Contract → Contract
+- ITILCategory → Label
 - Ticket + Ticket\_User + ITILSolution → Ticket
     - Ticket/ITILFollowup/TicketTask/ITILSolution + RequestType → Message
       - Document\_Item + Document → MessageDocument
