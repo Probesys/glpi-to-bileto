@@ -1,2 +1,3 @@
 /.env
 /vendor/
+/glpi-data.sql
