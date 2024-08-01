@@ -7,7 +7,9 @@ This project aims to export GLPI data into a ZIP file for import into Bileto.
 
 ## How to use
 
-Create a file named `.env` and set credentials to the GLPI database:
+### With a running database
+
+Create a file named `.env` and set credentials to the GLPI database (adapt to your case):
 
 ```env
 DB_HOST = localhost
@@ -24,6 +26,36 @@ $ ./bin/glpi-export
 ```
 
 This command creates a ZIP archive containing various files with data to be imported into Bileto.
+
+### With a SQL dump
+
+Start the Docker environment:
+
+```console
+$ make docker-start
+```
+
+Import the SQL file:
+
+```console
+$ make docker-db-import FILE=glpi-data.sql
+```
+
+Create a file named `.env` and set credentials to the Docker database:
+
+```env
+DB_HOST = database
+DB_PORT = 3306
+DB_NAME = glpi
+DB_USERNAME = root
+DB_PASSWORD = mariadb
+```
+
+Then, run the command:
+
+```console
+$ ./bin/glpi-export
+```
 
 ## Development
 
@@ -63,6 +95,7 @@ Naive mapping (GLPI → Bileto):
 - User + UserEmail → User
   - Profile\_User → Authorization
 - ProjectTask + PluginProjectbridgeContract + PluginProjectbridgeContractQuotaAlert + Project + Contract → Contract
+- ITILCategory → Label
 - Ticket + Ticket\_User + ITILSolution → Ticket
     - Ticket/ITILFollowup/TicketTask/ITILSolution + RequestType → Message
       - Document\_Item + Document → MessageDocument

@@ -1,0 +1,20 @@
+services:
+    php:
+        image: "glpi-to-bileto:local"
+        build:
+            context: .
+        volumes:
+            - ..:/var/www/html:z
+        user: $USER
+
+    database:
+        image: mariadb:10.11
+        restart: unless-stopped
+        environment:
+            MARIADB_ROOT_PASSWORD: mariadb
+            MARIADB_DATABASE: glpi
+        volumes:
+            - database:/var/lib/mysql
+
+volumes:
+  database:

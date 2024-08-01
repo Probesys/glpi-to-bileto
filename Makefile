@@ -4,6 +4,10 @@
 
 .DEFAULT_GOAL := help
 
+USER = $(shell id -u):$(shell id -g)
+
+DOCKER_COMPOSE = docker compose -p glpi-to-bileto -f docker/docker-compose.yml
+
 ifdef NO_DOCKER
 	PHP = php
 	COMPOSER = composer
@@ -12,9 +16,24 @@ else
 	COMPOSER = ./docker/bin/composer
 endif
 
+.PHONY: docker-start
+docker-start: ## Start a development server with Docker
+	$(DOCKER_COMPOSE) up
+
 .PHONY: docker-build
-docker-build: ## Rebuild the Docker image
-	docker build --pull -t glpi-to-docker docker/
+docker-build: ## Rebuild Docker containers
+	$(DOCKER_COMPOSE) build
+
+.PHONY: docker-clean
+docker-clean: ## Clean the Docker stuff
+	$(DOCKER_COMPOSE) down -v
+
+.PHONY: docker-db-import
+docker-db-import: ## Import a SQL file from GLPI
+ifndef FILE
+	$(error You need to provide a "FILE" argument)
+endif
+	./docker/bin/mariadb < $(FILE)
 
 .PHONY: install
 install: ## Install the development dependencies
