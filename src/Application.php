@@ -446,6 +446,7 @@ class Application
             list(
                 $requester_id,
                 $assignee_id,
+                $observer_ids,
             ) = $this->fetchTicketActors($ticket);
 
             if ($ticket['type'] === 1) {
@@ -559,6 +560,7 @@ class Application
                 'priority' => $this->getWeight($ticket['priority']),
                 'requesterId' => $requester_id,
                 'assigneeId' => $assignee_id,
+                'observerIds' => $observer_ids,
                 'organizationId' => $this->getOrganizationId($ticket['entities_id']),
                 'solutionId' => $solution_id,
                 'contractIds' => $contract_ids,
@@ -767,7 +769,7 @@ class Application
      *
      * @param array<string, mixed> $ticket
      *
-     * @return array{?string, ?string}
+     * @return array{?string, ?string, string[]}
      */
     private function fetchTicketActors(array $ticket): array
     {
@@ -796,7 +798,14 @@ class Application
             $assignee_id = strval($assignee['users_id']);
         }
 
-        return [$requester_id, $assignee_id];
+        $observer_ids = [];
+        foreach ($ticket_users as $ticket_user) {
+            if ($ticket_user['type'] === 3) {
+                $observer_ids[] = strval($ticket_user['users_id']);
+            }
+        }
+
+        return [$requester_id, $assignee_id, $observer_ids];
     }
 
     /**
