@@ -12,6 +12,7 @@ class Application
 
     /**
      * @var array{
+     *     'skip on error': bool,
      *     'merge organizations': bool,
      *     'ignore contracts': bool,
      *     'since': ?\DateTimeImmutable,
@@ -43,6 +44,7 @@ class Application
     public function execute(array $arguments): int
     {
         $this->options = [
+            'skip on error' => false,
             'merge organizations' => false,
             'ignore contracts' => false,
             'since' => null,
@@ -54,6 +56,8 @@ class Application
             if ($argument === '--help' || $argument === '-h') {
                 echo $this->usage();
                 return 0;
+            } elseif ($argument === '--skip-on-error') {
+                $this->options['skip on error'] = true;
             } elseif ($argument === '--merge-organizations') {
                 $this->options['merge organizations'] = true;
             } elseif ($argument === '--ignore-contracts') {
@@ -154,6 +158,7 @@ class Application
 
         Options:
           --help -h                  display this help message
+          --skip-on-error            skip data concerned by an error
           --merge-organizations      merge the organizations having the same name
           --ignore-contracts         don’t try to load contracts from ProjectBridge
           --since=[YYYY-MM-DD]       export tickets and contracts after the given date
@@ -257,7 +262,10 @@ class Application
                 $name = $user['name'];
             }
 
-            if (!$email) {
+            if (!$email && $this->options['skip on error']) {
+                echo "[Warning] Skipping User {$name} (id {$user['id']}): email is missing\n";
+                continue;
+            } elseif (!$email) {
                 echo "[Error] User {$name} (id {$user['id']}) is invalid: email is missing\n";
                 $email = '';
             }
@@ -284,13 +292,24 @@ class Application
                     continue;
                 }
 
+                $organization_id = $this->getOrganizationId($user_profile['entities_id'], context: $context);
+
+                if ($organization_id === null) {
+                    continue;
+                }
+
                 $authorizations[] = [
                     'roleId' => strval($user_profile['profiles_id']),
-                    'organizationId' => $this->getOrganizationId($user_profile['entities_id'], context: $context),
+                    'organizationId' => $organization_id,
                 ];
             }
 
             $context = "User {$name} (id {$user['id']})";
+            $organization_id = $this->getOrganizationId($user['entities_id'], context: $context);
+
+            if ($organization_id === null) {
+                continue;
+            }
 
             $users[] = [
                 'id' => strval($user['id']),
@@ -298,7 +317,7 @@ class Application
                 'locale' => 'fr_FR',
                 'name' => $name,
                 'ldapIdentifier' => $ldap_identifier,
-                'organizationId' => $this->getOrganizationId($user['entities_id'], context: $context),
+                'organizationId' => $organization_id,
                 'authorizations' => $authorizations,
             ];
         }
@@ -408,6 +427,11 @@ class Application
             }
 
             $context = "Contract (id {$contract_id})";
+            $organization_id = $this->getOrganizationId($contract['entities_id'], context: $context);
+
+            if ($organization_id === null) {
+                continue;
+            }
 
             $contracts[] = [
                 'id' => strval($project_task['id']),
@@ -416,7 +440,7 @@ class Application
                 'endAt' => $end_at->format(\DateTimeInterface::RFC3339),
                 'maxHours' => intval($project_task['planned_duration'] / 60 / 60),
                 'notes' => $contract['comment'],
-                'organizationId' => $this->getOrganizationId($contract['entities_id'], context: $context),
+                'organizationId' => $organization_id,
                 'timeAccountingUnit' => 30,
                 'hoursAlert' => $hours_alert,
                 'dateAlert' => $date_alert,
@@ -590,6 +614,11 @@ class Application
             }
 
             $context = "Ticket (id {$ticket['id']})";
+            $organization_id = $this->getOrganizationId($ticket['entities_id'], context: $context);
+
+            if ($organization_id === null) {
+                continue;
+            }
 
             $tickets[] = [
                 'id' => strval($ticket['id']),
@@ -604,7 +633,7 @@ class Application
                 'requesterId' => $requester_id,
                 'assigneeId' => $assignee_id,
                 'observerIds' => $observer_ids,
-                'organizationId' => $this->getOrganizationId($ticket['entities_id'], context: $context),
+                'organizationId' => $organization_id,
                 'solutionId' => $solution_id,
                 'contractIds' => $contract_ids,
                 'labelIds' => $label_ids,
@@ -793,9 +822,12 @@ class Application
      *
      * It is especially useful when organizations are merged by names.
      */
-    private function getOrganizationId(int $entity_id, string $context): string
+    private function getOrganizationId(int $entity_id, string $context): ?string
     {
-        if (!isset($this->entities_to_orgas[$entity_id])) {
+        if (!isset($this->entities_to_orgas[$entity_id]) && $this->options['skip on error']) {
+            echo "[Warning] Skipping {$context}: Entity (id {$entity_id}) doesn't exist\n";
+            return null;
+        } elseif (!isset($this->entities_to_orgas[$entity_id])) {
             echo "[Error] {$context} is invalid: Entity (id {$entity_id}) doesn't exist\n";
 
             $organization_id = strval($entity_id);
