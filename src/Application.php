@@ -14,6 +14,7 @@ class Application
      * @var array{
      *     'merge organizations': bool,
      *     'ignore contracts': bool,
+     *     'since': ?\DateTimeImmutable,
      * } $options
      */
     private array $options;
@@ -44,6 +45,7 @@ class Application
         $this->options = [
             'merge organizations' => false,
             'ignore contracts' => false,
+            'since' => null,
         ];
 
         $this->entities_to_orgas = [];
@@ -56,6 +58,16 @@ class Application
                 $this->options['merge organizations'] = true;
             } elseif ($argument === '--ignore-contracts') {
                 $this->options['ignore contracts'] = true;
+            } elseif (str_starts_with($argument, '--since=')) {
+                $date_string = substr($argument, strlen('--since='));
+
+                try {
+                    $date = new \DateTimeImmutable($date_string);
+                    $this->options['since'] = $date;
+                } catch (\Exception $error) {
+                    echo "Malformed option: --since argument must be a valid datetime (e.g. 2024-01-01)";
+                    return -1;
+                }
             } else {
                 echo "Unrecognized option: {$argument}\n\n";
                 echo $this->usage();
@@ -144,6 +156,7 @@ class Application
           --help -h                  display this help message
           --merge-organizations      merge the organizations having the same name
           --ignore-contracts         don’t try to load contracts from ProjectBridge
+          --since=[YYYY-MM-DD]       export tickets and contracts after the given date
         TEXT;
     }
 
@@ -319,10 +332,21 @@ class Application
             FROM glpi_plugin_projectbridge_contracts
         SQL);
 
-        $data = $this->database->fetchAll(<<<SQL
+        $sql = <<<SQL
             SELECT id, projects_id, plan_start_date, plan_end_date, name, planned_duration
             FROM glpi_projecttasks
-        SQL);
+        SQL;
+        $parameters = [];
+
+        $since = $this->options['since'];
+        if ($since) {
+            $sql .= ' WHERE plan_end_date >= :since';
+            $parameters[':since'] = $since->format('Y-m-d');
+        }
+
+        $statement = $this->database->prepare($sql);
+        $statement->execute($parameters);
+        $data = $statement->fetchAll();
 
         $contracts = [];
 
@@ -435,12 +459,23 @@ class Application
      */
     public function exportTicketsAsTickets(): array
     {
-        $data = $this->database->fetchAll(<<<SQL
+        $sql = <<<SQL
             SELECT id, date, users_id_recipient, name, content, type, status,
                 urgency, impact, priority, entities_id, requesttypes_id,
                 itilcategories_id
             FROM glpi_tickets
-        SQL);
+        SQL;
+        $parameters = [];
+
+        $since = $this->options['since'];
+        if ($since) {
+            $sql .= ' WHERE date >= :since';
+            $parameters[':since'] = $since->format('Y-m-d');
+        }
+
+        $statement = $this->database->prepare($sql);
+        $statement->execute($parameters);
+        $data = $statement->fetchAll();
 
         $tickets = [];
         foreach ($data as $ticket) {
