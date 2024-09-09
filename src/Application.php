@@ -94,21 +94,21 @@ class Application
             }
             echo "OK\n";
         } catch (\Exception $e) {
-            echo '[Error] ' . $e->getMessage();
+            echo '[Critical] ' . $e->getMessage();
             return -2;
         }
 
         echo "Generating the archive…\n";
         $files = [];
         foreach ($glpi_data as $name => $data) {
-            $json = json_encode($data, JSON_PRETTY_PRINT);
-
-            if ($json === false) {
-                echo '[Error] Cannot encode an array to JSON';
+            try {
+                $json = json_encode($data, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
+                $files["{$name}.json"] = $json;
+            } catch (\JsonException $error) {
+                echo "[Critical] Cannot export the {$name}.json file: ";
+                echo "encoding the data to JSON failed ({$error->getMessage()})";
                 return -2;
             }
-
-            $files["{$name}.json"] = $json;
         }
 
         $now = new \DateTimeImmutable();
@@ -235,11 +235,6 @@ class Application
                 ':user_id' => $user['id'],
             ]);
 
-            if (!$email) {
-                echo "[Warning] User {$user['id']} has no email.\n";
-                $email = '';
-            }
-
             $name = '';
             if ($user['realname'] || $user['firstname']) {
                 $realname = $user['realname'] ?? '';
@@ -247,6 +242,11 @@ class Application
                 $name = trim("{$firstname} {$realname}");
             } else {
                 $name = $user['name'];
+            }
+
+            if (!$email) {
+                echo "[Error] User {$name} (id {$user['id']}) is invalid: email is missing\n";
+                $email = '';
             }
 
             $ldap_identifier = null;
@@ -264,16 +264,20 @@ class Application
 
             $authorizations = [];
             foreach ($user_profiles as $user_profile) {
+                $context = "User Profile (id {$user_profile['id']}) of User {$name} (id {$user['id']})";
+
                 if ($user_profile['is_recursive']) {
-                    echo "[Warning] Ignoring recursive authorization {$user_profile['id']} of user {$user['id']}\n";
+                    echo "[Warning] Skipping {$context}: no support for GLPI recursive profiles\n";
                     continue;
                 }
 
                 $authorizations[] = [
                     'roleId' => strval($user_profile['profiles_id']),
-                    'organizationId' => $this->getOrganizationId($user_profile['entities_id']),
+                    'organizationId' => $this->getOrganizationId($user_profile['entities_id'], context: $context),
                 ];
             }
+
+            $context = "User {$name} (id {$user['id']})";
 
             $users[] = [
                 'id' => strval($user['id']),
@@ -281,7 +285,7 @@ class Application
                 'locale' => 'fr_FR',
                 'name' => $name,
                 'ldapIdentifier' => $ldap_identifier,
-                'organizationId' => $this->getOrganizationId($user['entities_id']),
+                'organizationId' => $this->getOrganizationId($user['entities_id'], context: $context),
                 'authorizations' => $authorizations,
             ];
         }
@@ -326,36 +330,36 @@ class Application
             $project_id = $project_task['projects_id'];
 
             if (!isset($projects_by_ids[$project_id])) {
-                echo "[Warning] Skipping project task {$project_task['id']}: ";
-                echo "project {$project_id} doesn't exist\n";
+                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
+                echo "its related Project (id {$project_id}) doesn't exist\n";
                 continue;
             }
 
             $project = $projects_by_ids[$project_id];
 
             if (!isset($projects_to_contracts[$project_id])) {
-                echo "[Warning] Skipping project task {$project_task['id']}: ";
-                echo "contract for project {$project_id} doesn't exist\n";
+                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
+                echo "its related Project (id {$project_id}) is not attached to a Contract\n";
                 continue;
             }
 
             $contract_id = $projects_to_contracts[$project_id];
 
             if (!isset($contracts_by_ids[$contract_id])) {
-                echo "[Warning] Skipping project task {$project_task['id']}: ";
-                echo "contract {$contract_id} doesn't exist\n";
+                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
+                echo "its related Project (id {$project_id}) is attached to an unknown Contract (id {$contract_id})\n";
                 continue;
             }
 
             if (!isset($project_task['plan_start_date'])) {
-                echo "[Warning] Skipping project task {$project_task['id']}: ";
-                echo "missing plan_start_date\n";
+                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
+                echo "the plan_start_date field is not set\n";
                 continue;
             }
 
             if (!isset($project_task['plan_end_date'])) {
-                echo "[Warning] Skipping project task {$project_task['id']}: ";
-                echo "missing plan_end_date\n";
+                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
+                echo "the plan_end_date field is not set\n";
                 continue;
             }
 
@@ -379,6 +383,8 @@ class Application
                 $hours_alert = 80;
             }
 
+            $context = "Contract (id {$contract_id})";
+
             $contracts[] = [
                 'id' => strval($project_task['id']),
                 'name' => $name,
@@ -386,7 +392,7 @@ class Application
                 'endAt' => $end_at->format(\DateTimeInterface::RFC3339),
                 'maxHours' => intval($project_task['planned_duration'] / 60 / 60),
                 'notes' => $contract['comment'],
-                'organizationId' => $this->getOrganizationId($contract['entities_id']),
+                'organizationId' => $this->getOrganizationId($contract['entities_id'], context: $context),
                 'timeAccountingUnit' => 30,
                 'hoursAlert' => $hours_alert,
                 'dateAlert' => $date_alert,
@@ -548,6 +554,8 @@ class Application
                 }
             }
 
+            $context = "Ticket (id {$ticket['id']})";
+
             $tickets[] = [
                 'id' => strval($ticket['id']),
                 'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
@@ -561,7 +569,7 @@ class Application
                 'requesterId' => $requester_id,
                 'assigneeId' => $assignee_id,
                 'observerIds' => $observer_ids,
-                'organizationId' => $this->getOrganizationId($ticket['entities_id']),
+                'organizationId' => $this->getOrganizationId($ticket['entities_id'], context: $context),
                 'solutionId' => $solution_id,
                 'contractIds' => $contract_ids,
                 'labelIds' => $label_ids,
@@ -715,8 +723,8 @@ class Application
             ]);
 
             if (!$documents) {
-                echo "[Warning] Document {$document_item['documents_id']} doesn't exist ";
-                echo "(referenced by document_item {$document_item['id']})\n";
+                echo "[Warning] Skipping Document Item (id {$document_item['id']}): ";
+                echo "the related Document (id {$document_item['documents_id']}) doesn't exist\n";
                 continue;
             }
 
@@ -750,10 +758,10 @@ class Application
      *
      * It is especially useful when organizations are merged by names.
      */
-    private function getOrganizationId(int $entity_id): string
+    private function getOrganizationId(int $entity_id, string $context): string
     {
         if (!isset($this->entities_to_orgas[$entity_id])) {
-            echo "[Warning] Entity {$entity_id} does not exist.\n";
+            echo "[Error] {$context} is invalid: Entity (id {$entity_id}) doesn't exist\n";
 
             $organization_id = strval($entity_id);
             $this->entities_to_orgas[$entity_id] = $organization_id;
