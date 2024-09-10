@@ -683,6 +683,12 @@ class Application
                 $messages[] = $message;
 
                 $time_spent = $this->exportTicketTaskAsTimeSpent($ticket_task, $task_context);
+
+                if ($time_spent['time'] <= 0) {
+                    echo "[Warning] Skipping {$task_context}: time spent is not a positive number\n";
+                    continue;
+                }
+
                 $time_spent['contractId'] = $contract_id;
                 $time_spents[] = $time_spent;
             }
