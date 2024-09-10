@@ -302,50 +302,51 @@ class Application
                 }
             }
 
-            $ldap_identifier = null;
-            if ($user['user_dn']) {
-                $ldap_identifier = $user['name'];
-            }
-
-            $user_profiles = $this->database->fetchAll(<<<SQL
-                SELECT id, profiles_id, entities_id, is_recursive
-                FROM glpi_profiles_users
-                WHERE users_id = :user_id
-            SQL, [
-                ':user_id' => $glpi_user_id,
-            ]);
-
-            $authorizations = [];
-            foreach ($user_profiles as $user_profile) {
-                $context = "User Profile (id {$user_profile['id']}) of User {$name} (id {$glpi_user_id})";
-
-                if ($user_profile['is_recursive']) {
-                    echo "[Warning] Skipping {$context}: no support for GLPI recursive profiles\n";
-                    continue;
+            if (!isset($users[$user_id])) {
+                $ldap_identifier = null;
+                if ($user['user_dn']) {
+                    $ldap_identifier = $user['name'];
                 }
 
-                $organization_id = $this->getOrganizationId($user_profile['entities_id'], context: $context);
+                $user_profiles = $this->database->fetchAll(<<<SQL
+                    SELECT id, profiles_id, entities_id, is_recursive
+                    FROM glpi_profiles_users
+                    WHERE users_id = :user_id
+                SQL, [
+                    ':user_id' => $glpi_user_id,
+                ]);
+
+                $authorizations = [];
+                foreach ($user_profiles as $user_profile) {
+                    $context = "User Profile (id {$user_profile['id']}) of User {$name} (id {$glpi_user_id})";
+
+                    if ($user_profile['is_recursive']) {
+                        echo "[Warning] Skipping {$context}: no support for GLPI recursive profiles\n";
+                        continue;
+                    }
+
+                    $organization_id = $this->getOrganizationId($user_profile['entities_id'], context: $context);
+
+                    if ($organization_id === null) {
+                        echo "[Warning] Skipping {$context}: ";
+                        echo "Entity (id {$user_profile['entities_id']}) doesn't exist\n";
+                        continue;
+                    }
+
+                    $authorizations[] = [
+                        'roleId' => strval($user_profile['profiles_id']),
+                        'organizationId' => $organization_id,
+                    ];
+                }
+
+                $context = "User {$name} (id {$glpi_user_id})";
+                $organization_id = $this->getOrganizationId($user['entities_id'], context: $context);
 
                 if ($organization_id === null) {
-                    echo "[Warning] Skipping {$context}: Entity (id {$user_profile['entities_id']}) doesn't exist\n";
-                    continue;
+                    echo "[Warning] {$context} is invalid: ";
+                    echo "Entity (id {$user['entities_id']}) doesn't exist (set to null)\n";
                 }
 
-                $authorizations[] = [
-                    'roleId' => strval($user_profile['profiles_id']),
-                    'organizationId' => $organization_id,
-                ];
-            }
-
-            $context = "User {$name} (id {$glpi_user_id})";
-            $organization_id = $this->getOrganizationId($user['entities_id'], context: $context);
-
-            if ($organization_id === null) {
-                echo "[Warning] {$context} is invalid: ";
-                echo "Entity (id {$user['entities_id']}) doesn't exist (set to null)\n";
-            }
-
-            if (!isset($users[$user_id])) {
                 $users[$user_id] = [
                     'id' => $user_id,
                     'email' => $email,
