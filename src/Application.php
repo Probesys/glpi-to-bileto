@@ -295,6 +295,7 @@ class Application
                 $organization_id = $this->getOrganizationId($user_profile['entities_id'], context: $context);
 
                 if ($organization_id === null) {
+                    echo "[Warning] Skipping {$context}: Entity (id {$user_profile['entities_id']}) doesn't exist\n";
                     continue;
                 }
 
@@ -308,7 +309,8 @@ class Application
             $organization_id = $this->getOrganizationId($user['entities_id'], context: $context);
 
             if ($organization_id === null) {
-                continue;
+                echo "[Warning] {$context} is invalid: ";
+                echo "Entity (id {$user['entities_id']}) doesn't exist (set to null)\n";
             }
 
             $users[] = [
@@ -430,6 +432,7 @@ class Application
             $organization_id = $this->getOrganizationId($contract['entities_id'], context: $context);
 
             if ($organization_id === null) {
+                echo "[Warning] Skipping {$context}: Entity (id {$contract['entities_id']}) doesn't exist\n";
                 continue;
             }
 
@@ -617,6 +620,7 @@ class Application
             $organization_id = $this->getOrganizationId($ticket['entities_id'], context: $context);
 
             if ($organization_id === null) {
+                echo "[Warning] Skipping {$context}: Entity (id {$ticket['entities_id']}) doesn't exist\n";
                 continue;
             }
 
@@ -824,15 +828,14 @@ class Application
      */
     private function getOrganizationId(int $entity_id, string $context): ?string
     {
-        if (!isset($this->entities_to_orgas[$entity_id]) && $this->options['skip on error']) {
-            echo "[Warning] Skipping {$context}: Entity (id {$entity_id}) doesn't exist\n";
-            return null;
-        } elseif (!isset($this->entities_to_orgas[$entity_id])) {
+        if (!isset($this->entities_to_orgas[$entity_id]) && !$this->options['skip on error']) {
             echo "[Error] {$context} is invalid: Entity (id {$entity_id}) doesn't exist\n";
 
             $organization_id = strval($entity_id);
             $this->entities_to_orgas[$entity_id] = $organization_id;
             return $organization_id;
+        } elseif (!isset($this->entities_to_orgas[$entity_id])) {
+            return null;
         }
 
         return $this->entities_to_orgas[$entity_id];
