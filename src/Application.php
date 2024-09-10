@@ -1025,7 +1025,7 @@ class Application
                     continue;
                 }
 
-                $observer_ids[] = strval($ticket_user['users_id']);
+                $observer_ids[] = $observer_id;
             }
         }
 
