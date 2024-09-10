@@ -28,6 +28,9 @@ class Application
     /** @var array<int, string> */
     private array $glpi_users_to_users;
 
+    /** @var array<int, string> */
+    private array $project_tasks_to_contracts;
+
     public function __construct(string $app_path)
     {
         $dotenv = new Dotenv("{$app_path}/.env");
@@ -58,6 +61,8 @@ class Application
         ];
 
         $this->entities_to_orgas = [];
+        $this->glpi_users_to_users = [];
+        $this->project_tasks_to_contracts = [];
 
         foreach ($arguments as $argument) {
             if ($argument === '--help' || $argument === '-h') {
@@ -475,8 +480,11 @@ class Application
                 continue;
             }
 
+            $project_task_id = intval($project_task['id']);
+            $contract_id = strval($project_task_id);
+
             $contracts[] = [
-                'id' => strval($project_task['id']),
+                'id' => $contract_id,
                 'name' => $name,
                 'startAt' => $start_at->format(\DateTimeInterface::RFC3339),
                 'endAt' => $end_at->format(\DateTimeInterface::RFC3339),
@@ -487,6 +495,9 @@ class Application
                 'hoursAlert' => $hours_alert,
                 'dateAlert' => $date_alert,
             ];
+
+
+            $this->project_tasks_to_contracts[$project_task_id] = $contract_id;
         }
 
         return $contracts;
@@ -635,17 +646,29 @@ class Application
             if ($this->options['ignore contracts']) {
                 $contract_ids = [];
             } else {
-                // TODO load PluginProjectbridgeTicket instead?
-                $ticket_project_tasks = $this->database->fetchAll(<<<SQL
+                $project_tasks_ids = $this->database->fetchValues(<<<SQL
                     SELECT projecttasks_id
                     FROM glpi_projecttasks_tickets
                     WHERE tickets_id = :ticket_id
                 SQL, [
                     ':ticket_id' => $ticket['id'],
                 ]);
-                $contract_ids = array_map(function (array $ticket_project_task): string {
-                    return strval($ticket_project_task['projecttasks_id']);
-                }, $ticket_project_tasks);
+
+                $contract_ids = [];
+
+                foreach ($project_tasks_ids as $project_task_id) {
+                    $project_task_context = "Ticket Project Task (id {$project_task_id}) of {$context}";
+
+                    $contract_id = $this->getContractId($project_task_id, $project_task_context);
+
+                    if ($contract_id === null) {
+                        echo "[Warning] Skipping {$project_task_context}: ";
+                        echo "Project Task (id {$project_task_id}) doesn't exist\n";
+                        continue;
+                    }
+
+                    $contract_ids[] = $contract_id;
+                }
             }
 
             $contract_id = $contract_ids[0] ?? null;
@@ -963,6 +986,24 @@ class Application
         }
 
         return $this->glpi_users_to_users[$glpi_user_id];
+    }
+
+    /**
+     * Return the (Bileto) contract id corresponding to the given (GLPI) project task id.
+     */
+    private function getContractId(int $project_task_id, string $context): ?string
+    {
+        if (!isset($this->project_tasks_to_contracts[$project_task_id]) && !$this->options['skip on error']) {
+            echo "[Error] {$context} is invalid: Project Task (id {$project_task_id}) doesn't exist\n";
+
+            $contract_id = strval($project_task_id);
+            $this->project_tasks_to_contracts[$project_task_id] = $contract_id;
+            return $contract_id;
+        } elseif (!isset($this->project_tasks_to_contracts[$project_task_id])) {
+            return null;
+        }
+
+        return $this->project_tasks_to_contracts[$project_task_id];
     }
 
     /**

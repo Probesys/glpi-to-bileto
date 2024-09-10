@@ -130,4 +130,17 @@ class Database
         $statement->execute($parameters);
         return $statement->fetchColumn();
     }
+
+    /**
+     * Fetch a column corresponding to the SQL request. You must select one
+     * column (e.g. selecting the "name" column)
+     *
+     * @param array<string, mixed> $parameters
+     */
+    public function fetchValues(string $sql, array $parameters = []): mixed
+    {
+        $statement = $this->prepare($sql);
+        $statement->execute($parameters);
+        return $statement->fetchAll(\PDO::FETCH_COLUMN);
+    }
 }
