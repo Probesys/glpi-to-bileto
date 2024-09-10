@@ -14,6 +14,7 @@ class Application
      * @var array{
      *     'skip on error': bool,
      *     'merge organizations': bool,
+     *     'merge users': bool,
      *     'ignore contracts': bool,
      *     'since': ?\DateTimeImmutable,
      * } $options
@@ -22,6 +23,9 @@ class Application
 
     /** @var array<int, string> */
     private array $entities_to_orgas;
+
+    /** @var array<int, string> */
+    private array $glpi_users_to_users;
 
     public function __construct(string $app_path)
     {
@@ -46,6 +50,7 @@ class Application
         $this->options = [
             'skip on error' => false,
             'merge organizations' => false,
+            'merge users' => false,
             'ignore contracts' => false,
             'since' => null,
         ];
@@ -60,6 +65,8 @@ class Application
                 $this->options['skip on error'] = true;
             } elseif ($argument === '--merge-organizations') {
                 $this->options['merge organizations'] = true;
+            } elseif ($argument === '--merge-users') {
+                $this->options['merge users'] = true;
             } elseif ($argument === '--ignore-contracts') {
                 $this->options['ignore contracts'] = true;
             } elseif (str_starts_with($argument, '--since=')) {
@@ -160,6 +167,7 @@ class Application
           --help -h                  display this help message
           --skip-on-error            skip data concerned by an error
           --merge-organizations      merge the organizations having the same name
+          --merge-users              merge the users having the same email
           --ignore-contracts         don’t try to load contracts from ProjectBridge
           --since=[YYYY-MM-DD]       export tickets and contracts after the given date
         TEXT;
@@ -242,8 +250,12 @@ class Application
         SQL);
 
         $users = [];
+        $emails_to_ids = [];
 
         foreach ($data as $user) {
+            $glpi_user_id = intval($user['id']);
+            $user_id = strval($glpi_user_id);
+
             $email = $this->database->fetchValue(<<<SQL
                 SELECT email
                 FROM glpi_useremails
@@ -252,6 +264,8 @@ class Application
             SQL, [
                 ':user_id' => $user['id'],
             ]);
+
+            $email = strtolower($email);
 
             $name = '';
             if ($user['realname'] || $user['firstname']) {
@@ -263,11 +277,19 @@ class Application
             }
 
             if (!$email && $this->options['skip on error']) {
-                echo "[Warning] Skipping User {$name} (id {$user['id']}): email is missing\n";
+                echo "[Warning] Skipping User {$name} (id {$glpi_user_id}): email is missing\n";
                 continue;
             } elseif (!$email) {
-                echo "[Error] User {$name} (id {$user['id']}) is invalid: email is missing\n";
+                echo "[Error] User {$name} (id {$glpi_user_id}) is invalid: email is missing\n";
                 $email = '';
+            }
+
+            if ($this->options['merge users'] && $email) {
+                if (isset($emails_to_ids[$email])) {
+                    $user_id = $emails_to_ids[$email];
+                } else {
+                    $emails_to_ids[$email] = $user_id;
+                }
             }
 
             $ldap_identifier = null;
@@ -280,12 +302,12 @@ class Application
                 FROM glpi_profiles_users
                 WHERE users_id = :user_id
             SQL, [
-                ':user_id' => $user['id'],
+                ':user_id' => $glpi_user_id,
             ]);
 
             $authorizations = [];
             foreach ($user_profiles as $user_profile) {
-                $context = "User Profile (id {$user_profile['id']}) of User {$name} (id {$user['id']})";
+                $context = "User Profile (id {$user_profile['id']}) of User {$name} (id {$glpi_user_id})";
 
                 if ($user_profile['is_recursive']) {
                     echo "[Warning] Skipping {$context}: no support for GLPI recursive profiles\n";
@@ -305,7 +327,7 @@ class Application
                 ];
             }
 
-            $context = "User {$name} (id {$user['id']})";
+            $context = "User {$name} (id {$glpi_user_id})";
             $organization_id = $this->getOrganizationId($user['entities_id'], context: $context);
 
             if ($organization_id === null) {
@@ -313,16 +335,22 @@ class Application
                 echo "Entity (id {$user['entities_id']}) doesn't exist (set to null)\n";
             }
 
-            $users[] = [
-                'id' => strval($user['id']),
-                'email' => $email,
-                'locale' => 'fr_FR',
-                'name' => $name,
-                'ldapIdentifier' => $ldap_identifier,
-                'organizationId' => $organization_id,
-                'authorizations' => $authorizations,
-            ];
+            if (!isset($users[$user_id])) {
+                $users[$user_id] = [
+                    'id' => $user_id,
+                    'email' => $email,
+                    'locale' => 'fr_FR',
+                    'name' => $name,
+                    'ldapIdentifier' => $ldap_identifier,
+                    'organizationId' => $organization_id,
+                    'authorizations' => $authorizations,
+                ];
+            }
+
+            $this->glpi_users_to_users[$glpi_user_id] = $user_id;
         }
+
+        $users = array_values($users);
 
         return $users;
     }
@@ -506,16 +534,33 @@ class Application
 
         $tickets = [];
         foreach ($data as $ticket) {
+            $context = "Ticket (id {$ticket['id']})";
+
             $messages = [];
-            $messages[] = $this->exportTicketAsMessage($ticket);
+
+            $message = $this->exportTicketAsMessage($ticket, $context);
+
+            if ($message['createdById'] === null) {
+                echo "[Warning] Skipping {$context}: ";
+                echo "User (id {$ticket['users_id_recipient']}) doesn't exist\n";
+                continue;
+            }
+
+            $messages[] = $message;
 
             $created_at = new \DateTimeImmutable($ticket['date']);
+            $created_by_id = $message['createdById'];
 
             list(
                 $requester_id,
                 $assignee_id,
                 $observer_ids,
-            ) = $this->fetchTicketActors($ticket);
+            ) = $this->fetchTicketActors($ticket, $context);
+
+            if ($requester_id === null) {
+                // The warning is already logged in fetchTicketActors(), just skip.
+                continue;
+            }
 
             if ($ticket['type'] === 1) {
                 $type = 'incident';
@@ -546,17 +591,23 @@ class Application
                 ':ticket_id' => $ticket['id'],
             ]);
 
-            $itil_solution = ArrayHelper::find($itil_solutions, function (array $itil_solution): bool {
-                return $itil_solution['status'] === 2 || $itil_solution['status'] === 3;
-            });
             $solution_id = null;
-            if ($itil_solution) {
-                $solution_id = 'solution-' . $itil_solution['id'];
-            }
 
             foreach ($itil_solutions as $itil_solution) {
-                if (isset($itil_solution['content'])) {
-                    $messages[] = $this->exportItilSolutionAsMessage($itil_solution);
+                $solution_context = "Solution Message (id {$itil_solution['id']}) of {$context}";
+
+                $message = $this->exportItilSolutionAsMessage($itil_solution, $solution_context);
+
+                if ($message['createdById'] === null) {
+                    echo "[Warning] Skipping {$solution_context}: ";
+                    echo "User (id {$itil_solution['users_id']}) doesn't exist\n";
+                    continue;
+                }
+
+                $messages[] = $message;
+
+                if ($itil_solution['status'] === 2 || $itil_solution['status'] === 3) {
+                    $solution_id = 'solution-' . $itil_solution['id'];
                 }
             }
 
@@ -593,13 +644,21 @@ class Application
 
             $time_spents = [];
             foreach ($ticket_tasks as $ticket_task) {
-                $time_spent = $this->exportTicketTaskAsTimeSpent($ticket_task);
+                $task_context = "Ticket Task (id {$ticket_task['id']}) of {$context}";
+
+                $message = $this->exportTicketTaskAsMessage($ticket_task, $task_context);
+
+                if ($message['createdById'] === null) {
+                    echo "[Warning] Skipping {$task_context}: ";
+                    echo "User (id {$ticket_task['users_id']}) doesn't exist\n";
+                    continue;
+                }
+
+                $messages[] = $message;
+
+                $time_spent = $this->exportTicketTaskAsTimeSpent($ticket_task, $task_context);
                 $time_spent['contractId'] = $contract_id;
                 $time_spents[] = $time_spent;
-
-                if (isset($ticket_task['content'])) {
-                    $messages[] = $this->exportTicketTaskAsMessage($ticket_task);
-                }
             }
 
             $itil_followups = $this->database->fetchAll(<<<SQL
@@ -610,13 +669,20 @@ class Application
             SQL, [
                 ':ticket_id' => $ticket['id'],
             ]);
+
             foreach ($itil_followups as $itil_followup) {
-                if (isset($itil_followup['content'])) {
-                    $messages[] = $this->exportItilFollowupAsMessage($itil_followup);
+                $followup_context = "Followup Message (id {$itil_followup['id']}) of {$context}";
+                $message = $this->exportItilFollowupAsMessage($itil_followup, $followup_context);
+
+                if ($message['createdById'] === null) {
+                    echo "[Warning] Skipping {$followup_context}: ";
+                    echo "User (id {$itil_followup['users_id']}) doesn't exist\n";
+                    continue;
                 }
+
+                $messages[] = $message;
             }
 
-            $context = "Ticket (id {$ticket['id']})";
             $organization_id = $this->getOrganizationId($ticket['entities_id'], context: $context);
 
             if ($organization_id === null) {
@@ -627,7 +693,7 @@ class Application
             $tickets[] = [
                 'id' => strval($ticket['id']),
                 'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-                'createdById' => strval($ticket['users_id_recipient']),
+                'createdById' => $created_by_id,
                 'type' => $type,
                 'status' => $status,
                 'title' => $ticket['name'],
@@ -656,7 +722,7 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportTicketAsMessage(array $ticket): array
+    public function exportTicketAsMessage(array $ticket, string $context): array
     {
         $created_at = new \DateTimeImmutable($ticket['date']);
         $via = $this->fetchVia($ticket['requesttypes_id']);
@@ -667,7 +733,7 @@ class Application
         return [
             'id' => "ticket-{$ticket['id']}",
             'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => strval($ticket['users_id_recipient']),
+            'createdById' => $this->getUserId($ticket['users_id_recipient'], $context),
             'isConfidential' => false,
             'via' => $via,
             'content' => $content,
@@ -682,17 +748,17 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportItilSolutionAsMessage(array $itil_solution): array
+    public function exportItilSolutionAsMessage(array $itil_solution, string $context): array
     {
         $created_at = new \DateTimeImmutable($itil_solution['date_creation']);
         $document_items = $this->fetchDocumentItems('ITILSolution', $itil_solution['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
-        $content = html_entity_decode($itil_solution['content']);
+        $content = html_entity_decode($itil_solution['content'] ?? '');
 
         return [
             'id' => "solution-{$itil_solution['id']}",
             'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => strval($itil_solution['users_id']),
+            'createdById' => $this->getUserId($itil_solution['users_id'], $context),
             'isConfidential' => false,
             'via' => 'webapp',
             'content' => $content,
@@ -707,13 +773,14 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportTicketTaskAsTimeSpent(array $ticket_task): array
+    public function exportTicketTaskAsTimeSpent(array $ticket_task, string $context): array
     {
         $task_created_at = new \DateTimeImmutable($ticket_task['date']);
         $time = intval($ticket_task['actiontime'] / 60);
+
         return [
             'createdAt' => $task_created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => strval($ticket_task['users_id']),
+            'createdById' => $this->getUserId($ticket_task['users_id'], $context),
             'time' => $time,
             'realTime' => $time,
         ];
@@ -726,17 +793,17 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportTicketTaskAsMessage(array $ticket_task): array
+    public function exportTicketTaskAsMessage(array $ticket_task, string $context): array
     {
         $created_at = new \DateTimeImmutable($ticket_task['date']);
         $document_items = $this->fetchDocumentItems('TicketTask', $ticket_task['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
-        $content = html_entity_decode($ticket_task['content']);
+        $content = html_entity_decode($ticket_task['content'] ?? '');
 
         return [
             'id' => "ticket-task-{$ticket_task['id']}",
             'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => strval($ticket_task['users_id']),
+            'createdById' => $this->getUserId($ticket_task['users_id'], $context),
             'isConfidential' => $ticket_task['is_private'] === 1,
             'via' => 'webapp',
             'content' => $content,
@@ -751,18 +818,18 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportItilFollowupAsMessage(array $itil_followup): array
+    public function exportItilFollowupAsMessage(array $itil_followup, string $context): array
     {
         $created_at = new \DateTimeImmutable($itil_followup['date']);
         $via = $this->fetchVia($itil_followup['requesttypes_id']);
         $document_items = $this->fetchDocumentItems('ITILFollowup', $itil_followup['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
-        $content = html_entity_decode($itil_followup['content']);
+        $content = html_entity_decode($itil_followup['content'] ?? '');
 
         return [
             'id' => "followup-{$itil_followup['id']}",
             'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => strval($itil_followup['users_id']),
+            'createdById' => $this->getUserId($itil_followup['users_id'], $context),
             'isConfidential' => $itil_followup['is_private'] === 1,
             'via' => $via,
             'content' => $content,
@@ -842,6 +909,26 @@ class Application
     }
 
     /**
+     * Return the (Bileto) user id corresponding to the given (GLPI) user id.
+     *
+     * It is especially useful when users are merged by emails.
+     */
+    private function getUserId(int $glpi_user_id, string $context): ?string
+    {
+        if (!isset($this->glpi_users_to_users[$glpi_user_id]) && !$this->options['skip on error']) {
+            echo "[Error] {$context} is invalid: User (id {$glpi_user_id}) doesn't exist\n";
+
+            $user_id = strval($glpi_user_id);
+            $this->glpi_users_to_users[$glpi_user_id] = $user_id;
+            return $user_id;
+        } elseif (!isset($this->glpi_users_to_users[$glpi_user_id])) {
+            return null;
+        }
+
+        return $this->glpi_users_to_users[$glpi_user_id];
+    }
+
+    /**
      * Fetch the actors of a GLPI actors and return the ids of the requester
      * and the assignee if any.
      *
@@ -849,7 +936,7 @@ class Application
      *
      * @return array{?string, ?string, string[]}
      */
-    private function fetchTicketActors(array $ticket): array
+    private function fetchTicketActors(array $ticket, string $context): array
     {
         $requester_id = null;
         $assignee_id = null;
@@ -865,20 +952,48 @@ class Application
         $requester = ArrayHelper::find($ticket_users, function (array $ticket_user): bool {
             return $ticket_user['type'] === 1;
         });
+
         if ($requester) {
-            $requester_id = strval($requester['users_id']);
+            $requester_context = "Requester of {$context}";
+
+            $requester_id = $this->getUserId($requester['users_id'], $requester_context);
+
+            if ($requester_id === null) {
+                // Note that we'll skip the ticket in the calling method. Thus,
+                // we use the "$context" variable and not the "$requester_context" one.
+                echo "[Warning] Skipping {$context}: ";
+                echo "User {$requester['users_id']} doesn't exist\n";
+            }
         }
 
         $assignee = ArrayHelper::find($ticket_users, function (array $ticket_user): bool {
             return $ticket_user['type'] === 2;
         });
+
         if ($assignee) {
-            $assignee_id = strval($assignee['users_id']);
+            $assignee_context = "Assignee of {$context}";
+
+            $assignee_id = $this->getUserId($assignee['users_id'], $assignee_context);
+
+            if ($assignee_id === null) {
+                echo "[Warning] Skipping {$assignee_context}: ";
+                echo "User {$assignee['users_id']} doesn't exist\n";
+            }
         }
+
+        $observer_context = "Observer of {$context}";
 
         $observer_ids = [];
         foreach ($ticket_users as $ticket_user) {
             if ($ticket_user['type'] === 3) {
+                $observer_id = $this->getUserId($ticket_user['users_id'], $observer_context);
+
+                if ($observer_id === null) {
+                    echo "[Warning] Skipping {$observer_context}: ";
+                    echo "User {$ticket_user['users_id']} doesn't exist\n";
+                    continue;
+                }
+
                 $observer_ids[] = strval($ticket_user['users_id']);
             }
         }
