@@ -12,6 +12,7 @@ class Application
 
     /**
      * @var array{
+     *     'dry run': bool,
      *     'skip on error': bool,
      *     'merge organizations': bool,
      *     'merge users': bool,
@@ -48,6 +49,7 @@ class Application
     public function execute(array $arguments): int
     {
         $this->options = [
+            'dry run' => false,
             'skip on error' => false,
             'merge organizations' => false,
             'merge users' => false,
@@ -61,6 +63,8 @@ class Application
             if ($argument === '--help' || $argument === '-h') {
                 echo $this->usage();
                 return 0;
+            } elseif ($argument === '--dry-run') {
+                $this->options['dry run'] = true;
             } elseif ($argument === '--skip-on-error') {
                 $this->options['skip on error'] = true;
             } elseif ($argument === '--merge-organizations') {
@@ -121,6 +125,11 @@ class Application
             return -2;
         }
 
+        if ($this->options['dry run']) {
+            echo 'GLPI data exported (dry run)';
+            return 0;
+        }
+
         echo "Generating the archive…\n";
         $files = [];
         foreach ($glpi_data as $name => $data) {
@@ -165,6 +174,7 @@ class Application
 
         Options:
           --help -h                  display this help message
+          --dry-run                  simulate an export, but do not write the archive
           --skip-on-error            skip data concerned by an error
           --merge-organizations      merge the organizations having the same name
           --merge-users              merge the users having the same email
