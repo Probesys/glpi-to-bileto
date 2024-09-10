@@ -540,6 +540,11 @@ class Application
 
             $message = $this->exportTicketAsMessage($ticket, $context);
 
+            if ($message['content'] === '') {
+                echo "[Warning] Skipping {$context}: the message content is empty.\n";
+                continue;
+            }
+
             if ($message['createdById'] === null) {
                 echo "[Warning] Skipping {$context}: ";
                 echo "User (id {$ticket['users_id_recipient']}) doesn't exist\n";
@@ -598,6 +603,11 @@ class Application
 
                 $message = $this->exportItilSolutionAsMessage($itil_solution, $solution_context);
 
+                if ($message['content'] === '') {
+                    echo "[Warning] Skipping {$solution_context}: the message content is empty.\n";
+                    continue;
+                }
+
                 if ($message['createdById'] === null) {
                     echo "[Warning] Skipping {$solution_context}: ";
                     echo "User (id {$itil_solution['users_id']}) doesn't exist\n";
@@ -648,6 +658,11 @@ class Application
 
                 $message = $this->exportTicketTaskAsMessage($ticket_task, $task_context);
 
+                if ($message['content'] === '') {
+                    echo "[Warning] Skipping {$task_context}: the message content is empty.\n";
+                    continue;
+                }
+
                 if ($message['createdById'] === null) {
                     echo "[Warning] Skipping {$task_context}: ";
                     echo "User (id {$ticket_task['users_id']}) doesn't exist\n";
@@ -673,6 +688,11 @@ class Application
             foreach ($itil_followups as $itil_followup) {
                 $followup_context = "Followup Message (id {$itil_followup['id']}) of {$context}";
                 $message = $this->exportItilFollowupAsMessage($itil_followup, $followup_context);
+
+                if ($message['content'] === '') {
+                    echo "[Warning] Skipping {$followup_context}: the message content is empty.\n";
+                    continue;
+                }
 
                 if ($message['createdById'] === null) {
                     echo "[Warning] Skipping {$followup_context}: ";
