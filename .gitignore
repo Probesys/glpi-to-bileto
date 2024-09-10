@@ -1,3 +1,6 @@
 /.env
 /vendor/
 /glpi-data.sql
+
+/plugins/*
+!/plugins/.keep

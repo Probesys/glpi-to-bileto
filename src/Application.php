@@ -8,6 +8,8 @@ namespace App;
 
 class Application
 {
+    private string $app_path;
+
     private Database $database;
 
     /**
@@ -32,9 +34,14 @@ class Application
     /** @var array<int, string> */
     private array $project_tasks_to_contracts;
 
+    /** @var Plugin[] */
+    private array $plugins;
+
     public function __construct(string $app_path)
     {
         $dotenv = new Dotenv("{$app_path}/.env");
+
+        $this->app_path = $app_path;
 
         $this->database = Database::get([
             'host' => $dotenv->pop('DB_HOST', 'localhost'),
@@ -99,6 +106,8 @@ class Application
             }
         }
 
+        $this->plugins = $this->loadPlugins();
+
         $glpi_data = [];
         try {
             echo "Getting organizations…\n";
@@ -111,6 +120,10 @@ class Application
 
             echo "Getting users…\n";
             $glpi_data['users'] = $this->exportUsersAsUsers();
+            echo "OK\n";
+
+            echo "Getting teams…\n";
+            $glpi_data['teams'] = $this->exportTeams();
             echo "OK\n";
 
             if (!$this->options['ignore contracts']) {
@@ -211,25 +224,39 @@ class Application
         $names_to_ids = [];
 
         foreach ($data as $entity) {
+            // Keep the entry id in memory as the plugins may change the value.
             $entity_id = intval($entity['id']);
-            $organization_id = strval($entity_id);
+
+            $entity = $this->callPluginsPreProcess($entity, 'entity');
+
+            if ($entity === null) {
+                continue;
+            }
+
+            $organization_id = strval($entity['id']);
             $name = $entity['name'];
 
-            if ($this->options['merge organizations'] && isset($names_to_ids[$name])) {
-                $organization_id = $names_to_ids[$name];
-            } else {
-                $organizations[] = [
+            if ($this->options['merge organizations']) {
+                if (isset($names_to_ids[$name])) {
+                    $organization_id = $names_to_ids[$name];
+                } else {
+                    $names_to_ids[$name] = $organization_id;
+                }
+            }
+
+            if (!isset($organizations[$organization_id])) {
+                $organizations[$organization_id] = [
                     'id' => $organization_id,
                     'name' => $name,
                 ];
-
-                $names_to_ids[$name] = $organization_id;
             }
 
             $this->entities_to_orgas[$entity_id] = $organization_id;
         }
 
-        return $organizations;
+        $organizations = array_values($organizations);
+
+        return $this->callPluginsPostProcess($organizations, 'organizations');
     }
 
     /**
@@ -256,7 +283,7 @@ class Application
             ];
         }
 
-        return $roles;
+        return $this->callPluginsPostProcess($roles, 'roles');
     }
 
     /**
@@ -379,7 +406,20 @@ class Application
 
         $users = array_values($users);
 
-        return $users;
+        return $this->callPluginsPostProcess($users, 'users');
+    }
+
+    /**
+     * Export Teams.
+     *
+     * This method is not exporting anything from GLPI for now, but it allows
+     * to create plugins to create teams.
+     *
+     * @return array<mixed[]>
+     */
+    public function exportTeams(): array
+    {
+        return $this->callPluginsPostProcess([], 'teams');
     }
 
     /**
@@ -521,7 +561,7 @@ class Application
             $this->project_tasks_to_contracts[$project_task_id] = $contract_id;
         }
 
-        return $contracts;
+        return $this->callPluginsPostProcess($contracts, 'contracts');
     }
 
     /**
@@ -547,7 +587,7 @@ class Application
             ];
         }
 
-        return $labels;
+        return $this->callPluginsPostProcess($labels, 'labels');
     }
 
     /**
@@ -800,7 +840,7 @@ class Application
             ];
         }
 
-        return $tickets;
+        return $this->callPluginsPostProcess($tickets, 'tickets');
     }
 
     /**
@@ -1147,6 +1187,79 @@ class Application
         } else {
             return 'webapp';
         }
+    }
+
+    /**
+     * Load the list of plugins under the plugins/ folder.
+     *
+     * @return Plugin[]
+     */
+    private function loadPlugins(): array
+    {
+        $plugins = [];
+
+        $plugins_folder = $this->app_path . '/plugins';
+
+        $folders = scandir($plugins_folder);
+        if ($folders === false) {
+            return [];
+        }
+
+        foreach ($folders as $folder) {
+            $folder_path = "{$plugins_folder}/{$folder}";
+            if ($folder === '.' || $folder === '..' || !is_dir($folder_path)) {
+                continue;
+            }
+
+            $plugin_class = "\\Plugin\\{$folder}\\Plugin";
+            $plugin = new $plugin_class();
+
+            if ($plugin instanceof Plugin) {
+                $plugins[] = $plugin;
+            }
+        }
+
+        return $plugins;
+    }
+
+    /**
+     * Call the given plugins "preProcess*" hook.
+     *
+     * @param mixed[] $data
+     * @param 'entity' $dataType
+     * @return mixed[]|null
+     */
+    private function callPluginsPreProcess(array $data, string $dataType): ?array
+    {
+        $hook = 'preProcess' . ucfirst($dataType);
+
+        foreach ($this->plugins as $plugin) {
+            $data = $plugin->$hook($data);
+
+            if ($data === null) {
+                return null;
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Call the given plugins "postProcess*" hook.
+     *
+     * @param array<mixed[]> $data
+     * @param 'organizations'|'roles'|'users'|'teams'|'contracts'|'labels'|'tickets' $dataType
+     * @return array<mixed[]>
+     */
+    private function callPluginsPostProcess(array $data, string $dataType): array
+    {
+        $hook = 'postProcess' . ucfirst($dataType);
+
+        foreach ($this->plugins as $plugin) {
+            $data = $plugin->$hook($data);
+        }
+
+        return $data;
     }
 
     private function critical(string ...$message_parts): void
