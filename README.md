@@ -86,7 +86,9 @@ $ ./docker/bin/composer --version
 
 ## Mapping GLPI data to Bileto entities
 
-This is a challenging part, as Bileto is not compatible with GLPI in many ways. Importing data mean that we lose some. This section explains how we mapped data from GLPI to Bileto, and attempts to clarify certain incompatibilities.
+This is a challenging part, as Bileto is not compatible with GLPI in many ways.
+Importing data mean that we lose some.
+This section explains how we mapped data from GLPI to Bileto, and attempts to clarify certain incompatibilities.
 
 Naive mapping (GLPI → Bileto):
 
@@ -119,9 +121,89 @@ Incompatibilities (this is the fun part!):
   - the date alert is expressed in months in GLPI, but must be converted to days in Bileto (e.g. `$alert * 30`)
   - the contracts' duration are given in seconds in GLPI, but must be converted to hours in Bileto (e.g. `intval($duration / 60 / 60)`)
   - the notion of "time accounting unit" doesn't exist in GLPI, we set the value to 30 by default
-- We can define several ticket requesters and assignees in GLPI, but only one in Bileto. We take the first that we find in both fields. Similarly, Bileto doesn't have observers yet. We just ignore this information from GLPI.
+- We can define several ticket requesters and assignees in GLPI, but only one in Bileto. We take the first that we find in both fields.
 - GLPI tickets have a few fields that are configurable, while they are not in Bileto. Hopefully at Probesys, the type (incident/request) and the status (new/in progress/etc.) are the same in both tools, so we just need to map fields ids from GLPI to their string values in Bileto. However, urgency, impact and priority are different: we export "high" and "very high" values to "high"; "low" and "very low" to "low"; and "medium" to "medium".
 - GLPI tickets may have several (ITIL)Solutions, while Bileto only defines a reference to the "current" solution. We consider only the first pending or approved solution from GLPI.
 - There are different kind of messages in GLPI: followup, tasks and solutions. The ticket also holds content. It means that each of these items must be exported as Messages in Bileto. A consequence is that we cannot use the ids directly (i.e. a followup and a task may have the same id!). In this case, we prepend the ids by the type of the initial object.
 - Spent times are handled through TicketTasks in GLPI. Unfortunately, there are no differences between accounted time and worked time (i.e. the concept of "time accounting unit"). We just export the `actiontime` for both values in Bileto. Also this value is converted from seconds to minutes.
 - The source of the messages (i.e. `via`) is configurable in GLPI, but it's not in Bileto (only `webapp` and `email` are actually available). We export the GLPI Ticket RequestType and test the value (i.e. if `request_type.name = email`, the source is "email", and "webapp" otherwise).
+
+## Customize the exportation with plugins
+
+You can create a plugin that will be able to connect to different parts of the script in order to alter the final exportation.
+For this, create a folder under the `plugins/` folder:
+
+```console
+$ mkdir plugins/MyPlugin
+```
+
+Then, in this folder, create a `Plugin.php` file.
+The class in it must extends the [`Plugin` class](/src/Plugin.php) and must be in a namespace named after the folder name:
+
+```php
+<?php
+
+namespace Plugin\MyPlugin;
+
+class Plugin extends \App\Plugin
+{
+}
+```
+
+There are various hooks available, take a look at the `Plugin` class.
+
+For instance, you can delete the "Root entity" (with the entity id 0) as it has no meaning in Bileto.
+
+```php
+<?php
+
+namespace Plugin\MyPlugin;
+
+class Plugin extends \App\Plugin
+{
+    public function preProcessEntity(array $entity): ?array
+    {
+        if ($entity['id'] === 0) {
+            // Return null to remove an entity
+            return null;
+        } else {
+            return $entity;
+        }
+    }
+}
+```
+
+You can also add a final message to all your tickets in order to give the link to your archived GLPI:
+
+```php
+<?php
+
+namespace Plugin\MyPlugin;
+
+class Plugin extends \App\Plugin
+{
+    public function postProcessTickets(array $tickets): array
+    {
+        return array_map(function ($ticket) {
+            $now = new \DateTimeImmutable();
+            $tech_user_id = '1'; // This should be the id of the agent who will perform the migration
+            $glpi_host = 'https://glpi.example.com';
+            $url = "https://{$glpi_host}/front/ticket.form.php?id={$ticket['id']}";
+
+            $message_migration = [
+                'id' => "migration-{$ticket['id']}",
+                'createdAt' => $now->format(\DateTimeInterface::RFC3339),
+                'createdById' => $tech_user_id,
+                'isConfidential' => true,
+                'content' => "<p>Ticket migrated from GLPI&nbsp;: <a href=\"{$url}\">go to ticket #{$ticket['id']}</a>.</p>",
+            ];
+
+            $ticket['messages'][] = $message_migration;
+
+            return $ticket;
+        }, $tickets);
+    }
+}
+```
+
+These are just a few examples, but the plugins are powerful enough to adapt the export to your own needs.
