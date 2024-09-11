@@ -856,7 +856,7 @@ class Application
         $via = $this->fetchVia($ticket['requesttypes_id']);
         $document_items = $this->fetchDocumentItems('Ticket', $ticket['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
-        $content = html_entity_decode($ticket['content'] ?? '');
+        $content = $this->sanitizeContent($ticket['content'] ?? '');
 
         return [
             'id' => "ticket-{$ticket['id']}",
@@ -881,7 +881,7 @@ class Application
         $created_at = new \DateTimeImmutable($itil_solution['date_creation']);
         $document_items = $this->fetchDocumentItems('ITILSolution', $itil_solution['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
-        $content = html_entity_decode($itil_solution['content'] ?? '');
+        $content = $this->sanitizeContent($itil_solution['content'] ?? '');
 
         return [
             'id' => "solution-{$itil_solution['id']}",
@@ -926,7 +926,7 @@ class Application
         $created_at = new \DateTimeImmutable($ticket_task['date_creation']);
         $document_items = $this->fetchDocumentItems('TicketTask', $ticket_task['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
-        $content = html_entity_decode($ticket_task['content'] ?? '');
+        $content = $this->sanitizeContent($ticket_task['content'] ?? '');
 
         return [
             'id' => "ticket-task-{$ticket_task['id']}",
@@ -952,7 +952,7 @@ class Application
         $via = $this->fetchVia($itil_followup['requesttypes_id']);
         $document_items = $this->fetchDocumentItems('ITILFollowup', $itil_followup['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
-        $content = html_entity_decode($itil_followup['content'] ?? '');
+        $content = $this->sanitizeContent($itil_followup['content'] ?? '');
 
         return [
             'id' => "followup-{$itil_followup['id']}",
@@ -1187,6 +1187,27 @@ class Application
         } else {
             return 'webapp';
         }
+    }
+
+    /**
+     * Return content as decoded HTML.
+     *
+     * If the content is detected as plain text, the newlines are replaced by `<br>`.
+     */
+    private function sanitizeContent(string $content): string
+    {
+        $is_html = (
+            str_contains($content, '&#60;p&#62;') ||
+            str_contains($content, '&#60;div&#62;')
+        );
+
+        if ($is_html) {
+            $content = html_entity_decode($content);
+        } else {
+            $content = nl2br($content);
+        }
+
+        return $content;
     }
 
     /**
