@@ -18,6 +18,7 @@ class Application
      *     'merge users': bool,
      *     'ignore contracts': bool,
      *     'since': ?\DateTimeImmutable,
+     *     'no warning': bool,
      * } $options
      */
     private array $options;
@@ -58,6 +59,7 @@ class Application
             'merge users' => false,
             'ignore contracts' => false,
             'since' => null,
+            'no warning' => false,
         ];
 
         $this->entities_to_orgas = [];
@@ -88,6 +90,8 @@ class Application
                     echo "Malformed option: --since argument must be a valid datetime (e.g. 2024-01-01)";
                     return -1;
                 }
+            } elseif ($argument === '--no-warning') {
+                $this->options['no warning'] = true;
             } else {
                 echo "Unrecognized option: {$argument}\n\n";
                 echo $this->usage();
@@ -126,7 +130,7 @@ class Application
             }
             echo "OK\n";
         } catch (\Exception $e) {
-            echo '[Critical] ' . $e->getMessage();
+            $this->critical($e->getMessage());
             return -2;
         }
 
@@ -142,8 +146,10 @@ class Application
                 $json = json_encode($data, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
                 $files["{$name}.json"] = $json;
             } catch (\JsonException $error) {
-                echo "[Critical] Cannot export the {$name}.json file: ";
-                echo "encoding the data to JSON failed ({$error->getMessage()})";
+                $this->critical(
+                    "Cannot export the {$name}.json file:",
+                    "encoding the data to JSON failed ({$error->getMessage()}).",
+                );
                 return -2;
             }
         }
@@ -185,6 +191,7 @@ class Application
           --merge-users              merge the users having the same email
           --ignore-contracts         don’t try to load contracts from ProjectBridge
           --since=[YYYY-MM-DD]       export tickets and contracts after the given date
+          --no-warning               don’t display the warnings
         TEXT;
     }
 
@@ -292,10 +299,10 @@ class Application
             }
 
             if (!$email && $this->options['skip on error']) {
-                echo "[Warning] Skipping User {$name} (id {$glpi_user_id}): email is missing\n";
+                $this->warning("Skipping User {$name} (id {$glpi_user_id}): email is missing.");
                 continue;
             } elseif (!$email) {
-                echo "[Error] User {$name} (id {$glpi_user_id}) is invalid: email is missing\n";
+                $this->error("User {$name} (id {$glpi_user_id}) is invalid: email is missing.");
                 $email = '';
             }
 
@@ -326,15 +333,17 @@ class Application
                     $context = "User Profile (id {$user_profile['id']}) of User {$name} (id {$glpi_user_id})";
 
                     if ($user_profile['is_recursive']) {
-                        echo "[Warning] Skipping {$context}: no support for GLPI recursive profiles\n";
+                        $this->warning("Skipping {$context}: no support for GLPI recursive profiles.");
                         continue;
                     }
 
                     $organization_id = $this->getOrganizationId($user_profile['entities_id'], context: $context);
 
                     if ($organization_id === null) {
-                        echo "[Warning] Skipping {$context}: ";
-                        echo "Entity (id {$user_profile['entities_id']}) doesn't exist\n";
+                        $this->warning(
+                            "Skipping {$context}:",
+                            "Entity (id {$user_profile['entities_id']}) doesn't exist.",
+                        );
                         continue;
                     }
 
@@ -348,8 +357,10 @@ class Application
                 $organization_id = $this->getOrganizationId($user['entities_id'], context: $context);
 
                 if ($organization_id === null) {
-                    echo "[Warning] {$context} is invalid: ";
-                    echo "Entity (id {$user['entities_id']}) doesn't exist (set to null)\n";
+                    $this->warning(
+                        "{$context} is invalid:",
+                        "Entity (id {$user['entities_id']}) doesn't exist (set to null).",
+                    );
                 }
 
                 $users[$user_id] = [
@@ -419,36 +430,46 @@ class Application
             $project_id = $project_task['projects_id'];
 
             if (!isset($projects_by_ids[$project_id])) {
-                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
-                echo "its related Project (id {$project_id}) doesn't exist\n";
+                $this->warning(
+                    "Skipping Project Task (id {$project_task['id']}):",
+                    "its related Project (id {$project_id}) doesn't exist.",
+                );
                 continue;
             }
 
             $project = $projects_by_ids[$project_id];
 
             if (!isset($projects_to_contracts[$project_id])) {
-                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
-                echo "its related Project (id {$project_id}) is not attached to a Contract\n";
+                $this->warning(
+                    "Skipping Project Task (id {$project_task['id']}):",
+                    "its related Project (id {$project_id}) is not attached to a Contract.",
+                );
                 continue;
             }
 
             $contract_id = $projects_to_contracts[$project_id];
 
             if (!isset($contracts_by_ids[$contract_id])) {
-                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
-                echo "its related Project (id {$project_id}) is attached to an unknown Contract (id {$contract_id})\n";
+                $this->warning(
+                    "Skipping Project Task (id {$project_task['id']}):",
+                    "its related Project (id {$project_id}) is attached to an unknown Contract (id {$contract_id}).",
+                );
                 continue;
             }
 
             if (!isset($project_task['plan_start_date'])) {
-                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
-                echo "the plan_start_date field is not set\n";
+                $this->warning(
+                    "Skipping Project Task (id {$project_task['id']}):",
+                    "the plan_start_date field is not set.",
+                );
                 continue;
             }
 
             if (!isset($project_task['plan_end_date'])) {
-                echo "[Warning] Skipping Project Task (id {$project_task['id']}): ";
-                echo "the plan_end_date field is not set\n";
+                $this->warning(
+                    "Skipping Project Task (id {$project_task['id']}):",
+                    "the plan_end_date field is not set.",
+                );
                 continue;
             }
 
@@ -476,7 +497,7 @@ class Application
             $organization_id = $this->getOrganizationId($contract['entities_id'], context: $context);
 
             if ($organization_id === null) {
-                echo "[Warning] Skipping {$context}: Entity (id {$contract['entities_id']}) doesn't exist\n";
+                $this->warning("Skipping {$context}: Entity (id {$contract['entities_id']}) doesn't exist.");
                 continue;
             }
 
@@ -563,13 +584,12 @@ class Application
             $message = $this->exportTicketAsMessage($ticket, $context);
 
             if ($message['content'] === '') {
-                echo "[Warning] Skipping {$context}: the message content is empty.\n";
+                $this->warning("Skipping {$context}: the message content is empty.");
                 continue;
             }
 
             if ($message['createdById'] === null) {
-                echo "[Warning] Skipping {$context}: ";
-                echo "User (id {$ticket['users_id_recipient']}) doesn't exist\n";
+                $this->warning("Skipping {$context}: User (id {$ticket['users_id_recipient']}) doesn't exist.");
                 continue;
             }
 
@@ -626,13 +646,15 @@ class Application
                 $message = $this->exportItilSolutionAsMessage($itil_solution, $solution_context);
 
                 if ($message['content'] === '') {
-                    echo "[Warning] Skipping {$solution_context}: the message content is empty.\n";
+                    $this->warning("Skipping {$solution_context}: the message content is empty.");
                     continue;
                 }
 
                 if ($message['createdById'] === null) {
-                    echo "[Warning] Skipping {$solution_context}: ";
-                    echo "User (id {$itil_solution['users_id']}) doesn't exist\n";
+                    $this->warning(
+                        "Skipping {$solution_context}:",
+                        "User (id {$itil_solution['users_id']}) doesn't exist.",
+                    );
                     continue;
                 }
 
@@ -662,8 +684,10 @@ class Application
                     $contract_id = $this->getContractId($project_task_id, $project_task_context);
 
                     if ($contract_id === null) {
-                        echo "[Warning] Skipping {$project_task_context}: ";
-                        echo "Project Task (id {$project_task_id}) doesn't exist\n";
+                        $this->warning(
+                            "Skipping {$project_task_context}:",
+                            "Project Task (id {$project_task_id}) doesn't exist.",
+                        );
                         continue;
                     }
 
@@ -693,13 +717,15 @@ class Application
                 $message = $this->exportTicketTaskAsMessage($ticket_task, $task_context);
 
                 if ($message['content'] === '') {
-                    echo "[Warning] Skipping {$task_context}: the message content is empty.\n";
+                    $this->warning("Skipping {$task_context}: the message content is empty.");
                     continue;
                 }
 
                 if ($message['createdById'] === null) {
-                    echo "[Warning] Skipping {$task_context}: ";
-                    echo "User (id {$ticket_task['users_id']}) doesn't exist\n";
+                    $this->warning(
+                        "Skipping {$task_context}:",
+                        "User (id {$ticket_task['users_id']}) doesn't exist.",
+                    );
                     continue;
                 }
 
@@ -708,7 +734,7 @@ class Application
                 $time_spent = $this->exportTicketTaskAsTimeSpent($ticket_task, $task_context);
 
                 if ($time_spent['time'] <= 0) {
-                    echo "[Warning] Skipping {$task_context}: time spent is not a positive number\n";
+                    $this->warning("Skipping {$task_context}: time spent is not a positive number.");
                     continue;
                 }
 
@@ -730,13 +756,15 @@ class Application
                 $message = $this->exportItilFollowupAsMessage($itil_followup, $followup_context);
 
                 if ($message['content'] === '') {
-                    echo "[Warning] Skipping {$followup_context}: the message content is empty.\n";
+                    $this->warning("Skipping {$followup_context}: the message content is empty.");
                     continue;
                 }
 
                 if ($message['createdById'] === null) {
-                    echo "[Warning] Skipping {$followup_context}: ";
-                    echo "User (id {$itil_followup['users_id']}) doesn't exist\n";
+                    $this->warning(
+                        "Skipping {$followup_context}:",
+                        "User (id {$itil_followup['users_id']}) doesn't exist.",
+                    );
                     continue;
                 }
 
@@ -746,7 +774,7 @@ class Application
             $organization_id = $this->getOrganizationId($ticket['entities_id'], context: $context);
 
             if ($organization_id === null) {
-                echo "[Warning] Skipping {$context}: Entity (id {$ticket['entities_id']}) doesn't exist\n";
+                $this->warning("Skipping {$context}: Entity (id {$ticket['entities_id']}) doesn't exist.");
                 continue;
             }
 
@@ -918,8 +946,10 @@ class Application
             ]);
 
             if (!$documents) {
-                echo "[Warning] Skipping Document Item (id {$document_item['id']}): ";
-                echo "the related Document (id {$document_item['documents_id']}) doesn't exist\n";
+                $this->warning(
+                    "Skipping Document Item (id {$document_item['id']}):",
+                    "the related Document (id {$document_item['documents_id']}) doesn't exist.",
+                );
                 continue;
             }
 
@@ -956,7 +986,7 @@ class Application
     private function getOrganizationId(int $entity_id, string $context): ?string
     {
         if (!isset($this->entities_to_orgas[$entity_id]) && !$this->options['skip on error']) {
-            echo "[Error] {$context} is invalid: Entity (id {$entity_id}) doesn't exist\n";
+            $this->error("{$context} is invalid: Entity (id {$entity_id}) doesn't exist.");
 
             $organization_id = strval($entity_id);
             $this->entities_to_orgas[$entity_id] = $organization_id;
@@ -976,7 +1006,7 @@ class Application
     private function getUserId(int $glpi_user_id, string $context): ?string
     {
         if (!isset($this->glpi_users_to_users[$glpi_user_id]) && !$this->options['skip on error']) {
-            echo "[Error] {$context} is invalid: User (id {$glpi_user_id}) doesn't exist\n";
+            $this->error("{$context} is invalid: User (id {$glpi_user_id}) doesn't exist.");
 
             $user_id = strval($glpi_user_id);
             $this->glpi_users_to_users[$glpi_user_id] = $user_id;
@@ -994,7 +1024,7 @@ class Application
     private function getContractId(int $project_task_id, string $context): ?string
     {
         if (!isset($this->project_tasks_to_contracts[$project_task_id]) && !$this->options['skip on error']) {
-            echo "[Error] {$context} is invalid: Project Task (id {$project_task_id}) doesn't exist\n";
+            $this->error("{$context} is invalid: Project Task (id {$project_task_id}) doesn't exist.");
 
             $contract_id = strval($project_task_id);
             $this->project_tasks_to_contracts[$project_task_id] = $contract_id;
@@ -1039,8 +1069,7 @@ class Application
             if ($requester_id === null) {
                 // Note that we'll skip the ticket in the calling method. Thus,
                 // we use the "$context" variable and not the "$requester_context" one.
-                echo "[Warning] Skipping {$context}: ";
-                echo "User {$requester['users_id']} doesn't exist\n";
+                $this->warning("Skipping {$context}: User {$requester['users_id']} doesn't exist.");
             }
         }
 
@@ -1054,8 +1083,7 @@ class Application
             $assignee_id = $this->getUserId($assignee['users_id'], $assignee_context);
 
             if ($assignee_id === null) {
-                echo "[Warning] Skipping {$assignee_context}: ";
-                echo "User {$assignee['users_id']} doesn't exist\n";
+                $this->warning("Skipping {$assignee_context}: User {$assignee['users_id']} doesn't exist.");
             }
         }
 
@@ -1067,8 +1095,7 @@ class Application
                 $observer_id = $this->getUserId($ticket_user['users_id'], $observer_context);
 
                 if ($observer_id === null) {
-                    echo "[Warning] Skipping {$observer_context}: ";
-                    echo "User {$ticket_user['users_id']} doesn't exist\n";
+                    $this->warning("Skipping {$observer_context}: User {$ticket_user['users_id']} doesn't exist.");
                     continue;
                 }
 
@@ -1120,5 +1147,30 @@ class Application
         } else {
             return 'webapp';
         }
+    }
+
+    private function critical(string ...$message_parts): void
+    {
+        $message = implode(' ', $message_parts);
+
+        echo "[Critical] {$message}\n";
+    }
+
+    private function error(string ...$message_parts): void
+    {
+        $message = implode(' ', $message_parts);
+
+        echo "[Error] {$message}\n";
+    }
+
+    private function warning(string ...$message_parts): void
+    {
+        if ($this->options['no warning']) {
+            return;
+        }
+
+        $message = implode(' ', $message_parts);
+
+        echo "[Warning] {$message}\n";
     }
 }
