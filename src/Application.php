@@ -558,7 +558,7 @@ class Application
     public function exportTicketsAsTickets(): array
     {
         $sql = <<<SQL
-            SELECT id, date, users_id_recipient, name, content, type, status,
+            SELECT id, date_creation, users_id_recipient, name, content, type, status,
                 urgency, impact, priority, entities_id, requesttypes_id,
                 itilcategories_id
             FROM glpi_tickets
@@ -567,7 +567,7 @@ class Application
 
         $since = $this->options['since'];
         if ($since) {
-            $sql .= ' WHERE date >= :since';
+            $sql .= ' WHERE date_creation >= :since';
             $parameters[':since'] = $since->format('Y-m-d');
         }
 
@@ -595,7 +595,7 @@ class Application
 
             $messages[] = $message;
 
-            $created_at = new \DateTimeImmutable($ticket['date']);
+            $created_at = new \DateTimeImmutable($ticket['date_creation']);
             $created_by_id = $message['createdById'];
 
             list(
@@ -703,7 +703,7 @@ class Application
             }
 
             $ticket_tasks = $this->database->fetchAll(<<<SQL
-                SELECT id, date, actiontime, users_id, is_private, content
+                SELECT id, date_creation, actiontime, users_id, is_private, content
                 FROM glpi_tickettasks
                 WHERE tickets_id = :ticket_id
             SQL, [
@@ -743,7 +743,7 @@ class Application
             }
 
             $itil_followups = $this->database->fetchAll(<<<SQL
-                SELECT id, date, users_id, is_private, content, requesttypes_id
+                SELECT id, date_creation, users_id, is_private, content, requesttypes_id
                 FROM glpi_itilfollowups
                 WHERE itemtype = 'Ticket'
                 AND items_id = :ticket_id
@@ -812,7 +812,7 @@ class Application
      */
     public function exportTicketAsMessage(array $ticket, string $context): array
     {
-        $created_at = new \DateTimeImmutable($ticket['date']);
+        $created_at = new \DateTimeImmutable($ticket['date_creation']);
         $via = $this->fetchVia($ticket['requesttypes_id']);
         $document_items = $this->fetchDocumentItems('Ticket', $ticket['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
@@ -863,7 +863,7 @@ class Application
      */
     public function exportTicketTaskAsTimeSpent(array $ticket_task, string $context): array
     {
-        $task_created_at = new \DateTimeImmutable($ticket_task['date']);
+        $task_created_at = new \DateTimeImmutable($ticket_task['date_creation']);
         $time = intval($ticket_task['actiontime'] / 60);
 
         return [
@@ -883,7 +883,7 @@ class Application
      */
     public function exportTicketTaskAsMessage(array $ticket_task, string $context): array
     {
-        $created_at = new \DateTimeImmutable($ticket_task['date']);
+        $created_at = new \DateTimeImmutable($ticket_task['date_creation']);
         $document_items = $this->fetchDocumentItems('TicketTask', $ticket_task['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
         $content = html_entity_decode($ticket_task['content'] ?? '');
@@ -908,7 +908,7 @@ class Application
      */
     public function exportItilFollowupAsMessage(array $itil_followup, string $context): array
     {
-        $created_at = new \DateTimeImmutable($itil_followup['date']);
+        $created_at = new \DateTimeImmutable($itil_followup['date_creation']);
         $via = $this->fetchVia($itil_followup['requesttypes_id']);
         $document_items = $this->fetchDocumentItems('ITILFollowup', $itil_followup['id']);
         $message_documents = $this->exportDocumentItemsToMessageDocuments($document_items);
