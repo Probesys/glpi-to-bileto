@@ -607,8 +607,9 @@ class Application
 
         $since = $this->options['since'];
         if ($since) {
-            $sql .= ' WHERE date_creation >= :since OR date >= :since';
-            $parameters[':since'] = $since->format('Y-m-d');
+            $sql .= ' WHERE date_creation >= ? OR date >= ?';
+            $parameters[] = $since->format('Y-m-d');
+            $parameters[] = $since->format('Y-m-d');
         }
 
         $statement = $this->database->prepare($sql);
