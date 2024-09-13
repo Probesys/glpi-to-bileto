@@ -1203,8 +1203,8 @@ class Application
     private function sanitizeContent(string $content): string
     {
         $is_html = (
-            str_contains($content, '&#60;p&#62;') ||
-            str_contains($content, '&#60;div&#62;')
+            str_contains($content, '&#60;/p&#62;') ||
+            str_contains($content, '&#60;/div&#62;')
         );
 
         if ($is_html) {
