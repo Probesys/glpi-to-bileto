@@ -1202,8 +1202,13 @@ class Application
      */
     private function sanitizeContent(string $content): string
     {
-        // Look for any "</[tag]>" pattern
-        $is_html = preg_match('/&#60;\/\w+&#62;/', $content) === 1;
+        // Look for any "</[tag]>" or "<br />" patterns
+        $is_html = (
+            preg_match('/&#60;\/\w+&#62;/', $content) === 1 ||
+            preg_match('/&lt;\/\w+&gt;/', $content) === 1 ||
+            preg_match('/&#60;br\s*(\/)?#62;/', $content) === 1 ||
+            preg_match('/&lt;br\s*(\/)?&gt;/', $content) === 1
+        );
 
         if ($is_html) {
             $content = html_entity_decode($content);
