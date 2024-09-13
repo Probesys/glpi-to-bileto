@@ -197,14 +197,14 @@ class Application
         Bileto server.
 
         Options:
-          --help -h                  display this help message
           --dry-run                  simulate an export, but do not write the archive
-          --skip-on-error            skip data concerned by an error
+          --help -h                  display this help message
+          --ignore-contracts         do not load the contracts from ProjectBridge
           --merge-organizations      merge the organizations having the same name
           --merge-users              merge the users having the same email
-          --ignore-contracts         don’t try to load contracts from ProjectBridge
+          --no-warning               do not display the warnings
           --since=[YYYY-MM-DD]       export tickets and contracts after the given date
-          --no-warning               don’t display the warnings
+          --skip-on-error            skip data concerned by an error
         TEXT;
     }
 
