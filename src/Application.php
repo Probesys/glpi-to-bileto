@@ -638,6 +638,7 @@ class Application
 
             $date_creation = $ticket['date_creation'] ?? $ticket['date'];
             $created_at = new \DateTimeImmutable($date_creation);
+            $updated_at = $created_at;
             $created_by_id = $message['createdById'];
 
             list(
@@ -813,6 +814,15 @@ class Application
                 $messages[] = $message;
             }
 
+            foreach ($messages as $message) {
+                $message_created_at = $message['createdAt'];
+                $message_created_at = new \DateTimeImmutable($message_created_at);
+
+                if ($message_created_at > $updated_at) {
+                    $updated_at = $message_created_at;
+                }
+            }
+
             $organization_id = $this->getOrganizationId($ticket['entities_id'], context: $context);
 
             if ($organization_id === null) {
@@ -823,6 +833,7 @@ class Application
             $tickets[] = [
                 'id' => strval($ticket['id']),
                 'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
+                'updatedAt' => $updated_at->format(\DateTimeInterface::RFC3339),
                 'createdById' => $created_by_id,
                 'type' => $type,
                 'status' => $status,
