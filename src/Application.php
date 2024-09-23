@@ -311,7 +311,6 @@ class Application
 
         foreach ($data as $user) {
             $glpi_user_id = intval($user['id']);
-            $user_id = strval($glpi_user_id);
 
             $email = $this->database->fetchValue(<<<SQL
                 SELECT email
@@ -319,10 +318,19 @@ class Application
                 WHERE users_id = :user_id
                 AND is_default = true
             SQL, [
-                ':user_id' => $user['id'],
+                ':user_id' => $glpi_user_id,
             ]);
 
-            $email = strtolower($email);
+            $user['email'] = strtolower($email);
+
+            $user = $this->callPluginsPreProcess($user, 'user');
+
+            if ($user === null) {
+                continue;
+            }
+
+            $user_id = strval($user['id']);
+            $email = $user['email'];
 
             $name = '';
             if ($user['realname'] || $user['firstname']) {
@@ -1277,7 +1285,7 @@ class Application
      * Call the given plugins "preProcess*" hook.
      *
      * @param mixed[] $data
-     * @param 'entity' $dataType
+     * @param 'entity'|'user' $dataType
      * @return mixed[]|null
      */
     private function callPluginsPreProcess(array $data, string $dataType): ?array

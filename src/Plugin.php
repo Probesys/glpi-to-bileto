@@ -25,6 +25,22 @@ class Plugin
     }
 
     /**
+     * Allow to modify a user before it is processed.
+     *
+     * This can be used to merge users together for instance, by
+     * changing the $user['id'], or to set an email if it's missing.
+     *
+     * It also can be used to remove a user by returning null.
+     *
+     * @param mixed[] $user
+     * @return mixed[]|null
+     */
+    public function preProcessUser(array $user): ?array
+    {
+        return $user;
+    }
+
+    /**
      * Allow to modify exported organizations.
      *
      * @param array<mixed[]> $organizations
