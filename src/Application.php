@@ -15,15 +15,18 @@ class Application
     /**
      * @var array{
      *     'dry run': bool,
-     *     'skip on error': bool,
+     *     'hostname': ?string,
+     *     'ignore contracts': bool,
      *     'merge organizations': bool,
      *     'merge users': bool,
-     *     'ignore contracts': bool,
-     *     'since': ?\DateTimeImmutable,
      *     'no warning': bool,
+     *     'since': ?\DateTimeImmutable,
+     *     'skip on error': bool,
      * } $options
      */
     private array $options;
+
+    private ?string $notification_uuid;
 
     /** @var array<int, string> */
     private array $entities_to_orgas;
@@ -61,14 +64,16 @@ class Application
     {
         $this->options = [
             'dry run' => false,
-            'skip on error' => false,
+            'hostname' => null,
+            'ignore contracts' => false,
             'merge organizations' => false,
             'merge users' => false,
-            'ignore contracts' => false,
-            'since' => null,
             'no warning' => false,
+            'since' => null,
+            'skip on error' => false,
         ];
 
+        $this->notification_uuid = null;
         $this->entities_to_orgas = [];
         $this->glpi_users_to_users = [];
         $this->project_tasks_to_contracts = [];
@@ -79,6 +84,8 @@ class Application
                 return 0;
             } elseif ($argument === '--dry-run') {
                 $this->options['dry run'] = true;
+            } elseif (str_starts_with($argument, '--hostname=')) {
+                $this->options['hostname'] = substr($argument, strlen('--hostname='));
             } elseif ($argument === '--skip-on-error') {
                 $this->options['skip on error'] = true;
             } elseif ($argument === '--merge-organizations') {
@@ -199,6 +206,7 @@ class Application
         Options:
           --dry-run                  simulate an export, but do not write the archive
           --help -h                  display this help message
+          --hostname                 set the GLPI hostname (required to link emails with tickets)
           --ignore-contracts         do not load the contracts from ProjectBridge
           --merge-organizations      merge the organizations having the same name
           --merge-users              merge the users having the same email
@@ -673,7 +681,7 @@ class Application
             }
 
             $itil_solutions = $this->database->fetchAll(<<<SQL
-                SELECT id, status, date_creation, users_id, content
+                SELECT id, status, date_creation, users_id, content, items_id AS tickets_id
                 FROM glpi_itilsolutions
                 WHERE items_id = :ticket_id
                 AND itemtype = 'Ticket'
@@ -746,7 +754,7 @@ class Application
             }
 
             $ticket_tasks = $this->database->fetchAll(<<<SQL
-                SELECT id, date, date_creation, actiontime, users_id, is_private, content
+                SELECT id, date, date_creation, actiontime, users_id, is_private, content, tickets_id
                 FROM glpi_tickettasks
                 WHERE tickets_id = :ticket_id
             SQL, [
@@ -786,7 +794,7 @@ class Application
             }
 
             $itil_followups = $this->database->fetchAll(<<<SQL
-                SELECT id, date, date_creation, users_id, is_private, content, requesttypes_id
+                SELECT id, date, date_creation, users_id, is_private, content, requesttypes_id, items_id AS tickets_id
                 FROM glpi_itilfollowups
                 WHERE itemtype = 'Ticket'
                 AND items_id = :ticket_id
@@ -878,6 +886,7 @@ class Application
             'createdById' => $this->getUserId($ticket['users_id_recipient'], $context),
             'isConfidential' => false,
             'via' => $via,
+            'emailId' => $this->getEmailId($ticket['id']),
             'content' => $content,
             'messageDocuments' => $message_documents,
         ];
@@ -903,6 +912,7 @@ class Application
             'createdById' => $this->getUserId($itil_solution['users_id'], $context),
             'isConfidential' => false,
             'via' => 'webapp',
+            'emailId' => $this->getEmailId($itil_solution['tickets_id']),
             'content' => $content,
             'messageDocuments' => $message_documents,
         ];
@@ -950,6 +960,7 @@ class Application
             'createdById' => $this->getUserId($ticket_task['users_id'], $context),
             'isConfidential' => $ticket_task['is_private'] === 1,
             'via' => 'webapp',
+            'emailId' => $this->getEmailId($ticket_task['tickets_id']),
             'content' => $content,
             'messageDocuments' => $message_documents,
         ];
@@ -977,6 +988,7 @@ class Application
             'createdById' => $this->getUserId($itil_followup['users_id'], $context),
             'isConfidential' => $itil_followup['is_private'] === 1,
             'via' => $via,
+            'emailId' => $this->getEmailId($itil_followup['tickets_id']),
             'content' => $content,
             'messageDocuments' => $message_documents,
         ];
@@ -1204,6 +1216,25 @@ class Application
         } else {
             return 'webapp';
         }
+    }
+
+    private function getEmailId(int $ticket_id): ?string
+    {
+        if ($this->options['hostname'] === null) {
+            return null;
+        }
+
+        $hostname = $this->options['hostname'];
+
+        if (!$this->notification_uuid) {
+            $this->notification_uuid = $this->database->fetchValue(<<<SQL
+                SELECT value
+                FROM glpi_configs
+                WHERE name = 'notification_uuid'
+            SQL);
+        }
+
+        return "GLPI_{$this->notification_uuid}-Ticket-{$ticket_id}@{$hostname}";
     }
 
     /**
