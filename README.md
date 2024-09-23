@@ -121,7 +121,7 @@ Incompatibilities (this is the fun part!):
   - the date alert is expressed in months in GLPI, but must be converted to days in Bileto (e.g. `$alert * 30`)
   - the contracts' duration are given in seconds in GLPI, but must be converted to hours in Bileto (e.g. `intval($duration / 60 / 60)`)
   - the notion of "time accounting unit" doesn't exist in GLPI, we set the value to 30 by default
-- We can define several ticket requesters and assignees in GLPI, but only one in Bileto. We take the first that we find in both fields.
+- We can define several ticket requesters and assignees in GLPI, but only one in Bileto. We take the first one that we find in both fields. The other requesters and assignees are exported as observers.
 - GLPI tickets have a few fields that are configurable, while they are not in Bileto. Hopefully at Probesys, the type (incident/request) and the status (new/in progress/etc.) are the same in both tools, so we just need to map fields ids from GLPI to their string values in Bileto. However, urgency, impact and priority are different: we export "high" and "very high" values to "high"; "low" and "very low" to "low"; and "medium" to "medium".
 - GLPI tickets may have several (ITIL)Solutions, while Bileto only defines a reference to the "current" solution. We consider only the first pending or approved solution from GLPI.
 - There are different kind of messages in GLPI: followup, tasks and solutions. The ticket also holds content. It means that each of these items must be exported as Messages in Bileto. A consequence is that we cannot use the ids directly (i.e. a followup and a task may have the same id!). In this case, we prepend the ids by the type of the initial object.

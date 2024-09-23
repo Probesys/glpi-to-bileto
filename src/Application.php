@@ -656,7 +656,7 @@ class Application
             ) = $this->fetchTicketActors($ticket, $context);
 
             if ($requester_id === null) {
-                // The warning is already logged in fetchTicketActors(), just skip.
+                $this->warning("Skipping {$context}: Requester is not set.");
                 continue;
             }
 
@@ -1106,8 +1106,11 @@ class Application
     }
 
     /**
-     * Fetch the actors of a GLPI actors and return the ids of the requester
-     * and the assignee if any.
+     * Fetch the actors of a GLPI actors and return the ids of the requester,
+     * the assignee and the observers if any.
+     *
+     * If the ticket has multiple requesters or assignees, only the first one
+     * is picked. The others are returned as observers.
      *
      * @param array<string, mixed> $ticket
      *
@@ -1117,6 +1120,7 @@ class Application
     {
         $requester_id = null;
         $assignee_id = null;
+        $observer_ids = [];
 
         $ticket_users = $this->database->fetchAll(<<<SQL
             SELECT type, users_id
@@ -1126,49 +1130,22 @@ class Application
             ':ticket_id' => $ticket['id'],
         ]);
 
-        $requester = ArrayHelper::find($ticket_users, function (array $ticket_user): bool {
-            return $ticket_user['type'] === 1;
-        });
+        $actor_context = "Actor of {$context}";
 
-        if ($requester) {
-            $requester_context = "Requester of {$context}";
-
-            $requester_id = $this->getUserId($requester['users_id'], $requester_context);
-
-            if ($requester_id === null) {
-                // Note that we'll skip the ticket in the calling method. Thus,
-                // we use the "$context" variable and not the "$requester_context" one.
-                $this->warning("Skipping {$context}: User {$requester['users_id']} doesn't exist.");
-            }
-        }
-
-        $assignee = ArrayHelper::find($ticket_users, function (array $ticket_user): bool {
-            return $ticket_user['type'] === 2;
-        });
-
-        if ($assignee) {
-            $assignee_context = "Assignee of {$context}";
-
-            $assignee_id = $this->getUserId($assignee['users_id'], $assignee_context);
-
-            if ($assignee_id === null) {
-                $this->warning("Skipping {$assignee_context}: User {$assignee['users_id']} doesn't exist.");
-            }
-        }
-
-        $observer_context = "Observer of {$context}";
-
-        $observer_ids = [];
         foreach ($ticket_users as $ticket_user) {
-            if ($ticket_user['type'] === 3) {
-                $observer_id = $this->getUserId($ticket_user['users_id'], $observer_context);
+            $user_id = $this->getUserId($ticket_user['users_id'], $actor_context);
 
-                if ($observer_id === null) {
-                    $this->warning("Skipping {$observer_context}: User {$ticket_user['users_id']} doesn't exist.");
-                    continue;
-                }
+            if ($user_id === null) {
+                $this->warning("Skipping {$actor_context}: User {$ticket_user['users_id']} doesn't exist.");
+                continue;
+            }
 
-                $observer_ids[] = $observer_id;
+            if ($ticket_user['type'] === 1 && $requester_id === null) {
+                $requester_id = $user_id;
+            } elseif ($ticket_user['type'] === 2 && $assignee_id === null) {
+                $assignee_id = $user_id;
+            } else {
+                $observer_ids[] = $user_id;
             }
         }
 
