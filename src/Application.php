@@ -636,13 +636,14 @@ class Application
         foreach ($data as $ticket) {
             $context = "Ticket (id {$ticket['id']})";
 
+            $title = html_entity_decode($ticket['name']);
+
             $messages = [];
 
             $message = $this->exportTicketAsMessage($ticket, $context);
 
             if ($message['content'] === '') {
-                $this->warning("Skipping {$context}: the message content is empty.");
-                continue;
+                $message['content'] = $title;
             }
 
             if ($message['createdById'] === null) {
@@ -855,7 +856,7 @@ class Application
                 'createdById' => $created_by_id,
                 'type' => $type,
                 'status' => $status,
-                'title' => html_entity_decode($ticket['name']),
+                'title' => $title,
                 'urgency' => $this->getWeight($ticket['urgency']),
                 'impact' => $this->getWeight($ticket['impact']),
                 'priority' => $this->getWeight($ticket['priority']),
