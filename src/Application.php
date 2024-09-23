@@ -845,7 +845,7 @@ class Application
                 'createdById' => $created_by_id,
                 'type' => $type,
                 'status' => $status,
-                'title' => $ticket['name'],
+                'title' => html_entity_decode($ticket['name']),
                 'urgency' => $this->getWeight($ticket['urgency']),
                 'impact' => $this->getWeight($ticket['impact']),
                 'priority' => $this->getWeight($ticket['priority']),
