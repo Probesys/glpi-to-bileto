@@ -767,30 +767,32 @@ class Application
 
                 $message = $this->exportTicketTaskAsMessage($ticket_task, $task_context);
 
-                if ($message['content'] === '') {
-                    $this->warning("Skipping {$task_context}: the message content is empty.");
-                    continue;
-                }
+                if ($message['content'] !== '') {
+                    if ($message['createdById'] === null) {
+                        $this->warning(
+                            "Skipping message related to {$task_context}:",
+                            "User (id {$ticket_task['users_id']}) doesn't exist.",
+                        );
+                        continue;
+                    }
 
-                if ($message['createdById'] === null) {
-                    $this->warning(
-                        "Skipping {$task_context}:",
-                        "User (id {$ticket_task['users_id']}) doesn't exist.",
-                    );
-                    continue;
+                    $messages[] = $message;
                 }
-
-                $messages[] = $message;
 
                 $time_spent = $this->exportTicketTaskAsTimeSpent($ticket_task, $task_context);
 
-                if ($time_spent['time'] <= 0) {
-                    $this->warning("Skipping {$task_context}: time spent is not a positive number.");
-                    continue;
-                }
+                if ($time_spent['time'] > 0) {
+                    if ($time_spent['createdById'] === null) {
+                        $this->warning(
+                            "Skipping time spent related to {$task_context}:",
+                            "User (id {$ticket_task['users_id']}) doesn't exist.",
+                        );
+                        continue;
+                    }
 
-                $time_spent['contractId'] = $contract_id;
-                $time_spents[] = $time_spent;
+                    $time_spent['contractId'] = $contract_id;
+                    $time_spents[] = $time_spent;
+                }
             }
 
             $itil_followups = $this->database->fetchAll(<<<SQL
