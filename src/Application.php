@@ -376,7 +376,11 @@ class Application
                     $context = "User Profile (id {$user_profile['id']}) of User {$name} (id {$glpi_user_id})";
 
                     if ($user_profile['is_recursive']) {
-                        $this->warning("Skipping {$context}: no support for GLPI recursive profiles.");
+                        if ($this->options['skip on error']) {
+                            $this->warning("Skipping {$context}: no support for GLPI recursive profiles.");
+                        } else {
+                            $this->error("Skipping {$context}: no support for GLPI recursive profiles.");
+                        }
                         continue;
                     }
 
@@ -486,47 +490,83 @@ class Application
             $project_id = $project_task['projects_id'];
 
             if (!isset($projects_by_ids[$project_id])) {
-                $this->warning(
-                    "Skipping Project Task (id {$project_task['id']}):",
-                    "its related Project (id {$project_id}) doesn't exist.",
-                );
+                if ($this->options['skip on error']) {
+                    $this->warning(
+                        "Skipping Project Task (id {$project_task['id']}):",
+                        "its related Project (id {$project_id}) doesn't exist.",
+                    );
+                } else {
+                    $this->error(
+                        "Skipping Project Task (id {$project_task['id']}):",
+                        "its related Project (id {$project_id}) doesn't exist.",
+                    );
+                }
+                continue;
+            }
+
+            if (!isset($projects_to_contracts[$project_id])) {
+                if ($this->options['skip on error']) {
+                    $this->warning(
+                        "Skipping Project Task (id {$project_task['id']}):",
+                        "its related Project (id {$project_id}) is not attached to a Contract.",
+                    );
+                } else {
+                    $this->error(
+                        "Skipping Project Task (id {$project_task['id']}):",
+                        "its related Project (id {$project_id}) is not attached to a Contract.",
+                    );
+                }
                 continue;
             }
 
             $project = $projects_by_ids[$project_id];
-
-            if (!isset($projects_to_contracts[$project_id])) {
-                $this->warning(
-                    "Skipping Project Task (id {$project_task['id']}):",
-                    "its related Project (id {$project_id}) is not attached to a Contract.",
-                );
-                continue;
-            }
-
             $contract_id = $projects_to_contracts[$project_id];
 
             if (!isset($contracts_by_ids[$contract_id])) {
-                $this->warning(
-                    "Skipping Project Task (id {$project_task['id']}):",
-                    "its related Project (id {$project_id}) is attached to an unknown Contract (id {$contract_id}).",
-                );
+                if ($this->options['skip on error']) {
+                    $this->warning(
+                        "Skipping Project Task (id {$project_task['id']}):",
+                        "its related Project (id {$project_id})",
+                        "is attached to an unknown Contract (id {$contract_id}).",
+                    );
+                } else {
+                    $this->error(
+                        "Skipping Project Task (id {$project_task['id']}):",
+                        "its related Project (id {$project_id})",
+                        "is attached to an unknown Contract (id {$contract_id}).",
+                    );
+                }
                 continue;
             }
 
             if (!isset($project_task['plan_start_date'])) {
-                $this->warning(
-                    "Skipping Project Task (id {$project_task['id']}):",
-                    "the plan_start_date field is not set.",
-                );
-                continue;
+                if ($this->options['skip on error']) {
+                    $this->warning(
+                        "Skipping Project Task (id {$project_task['id']}):",
+                        "the plan_start_date field is not set.",
+                    );
+                    continue;
+                } else {
+                    $this->error(
+                        "Project Task (id {$project_task['id']}) is invalid:",
+                        "the plan_start_date field is not set.",
+                    );
+                }
             }
 
             if (!isset($project_task['plan_end_date'])) {
-                $this->warning(
-                    "Skipping Project Task (id {$project_task['id']}):",
-                    "the plan_end_date field is not set.",
-                );
-                continue;
+                if ($this->options['skip on error']) {
+                    $this->warning(
+                        "Skipping Project Task (id {$project_task['id']}):",
+                        "the plan_end_date field is not set.",
+                    );
+                    continue;
+                } else {
+                    $this->error(
+                        "Project Task (id {$project_task['id']}) is invalid:",
+                        "the plan_end_date field is not set.",
+                    );
+                }
             }
 
             $contract = $contracts_by_ids[$contract_id];
@@ -664,9 +704,11 @@ class Application
                 $observer_ids,
             ) = $this->fetchTicketActors($ticket, $context);
 
-            if ($requester_id === null) {
+            if ($requester_id === null && $this->options['skip on error']) {
                 $this->warning("Skipping {$context}: Requester is not set.");
                 continue;
+            } elseif ($requester_id === null) {
+                $this->error("{$context} is invalid: Requester is not set.");
             }
 
             if ($ticket['type'] === 1) {
@@ -706,8 +748,8 @@ class Application
                 $message = $this->exportItilSolutionAsMessage($itil_solution, $solution_context);
 
                 if ($message['content'] === '') {
-                    $this->warning("Skipping {$solution_context}: the message content is empty.");
-                    continue;
+                    $this->warning("{$solution_context}: the message content is empty, using a default value.");
+                    $message['content'] = '<p>Ticket résolu.<p>';
                 }
 
                 if ($message['createdById'] === null) {
@@ -739,13 +781,11 @@ class Application
                 $contract_ids = [];
 
                 foreach ($project_tasks_ids as $project_task_id) {
-                    $project_task_context = "Ticket Project Task (id {$project_task_id}) of {$context}";
-
-                    $contract_id = $this->getContractId($project_task_id, $project_task_context);
+                    $contract_id = $this->getContractId($project_task_id, $context);
 
                     if ($contract_id === null) {
                         $this->warning(
-                            "Skipping {$project_task_context}:",
+                            "Skipping {$context}:",
                             "Project Task (id {$project_task_id}) doesn't exist.",
                         );
                         continue;
@@ -817,9 +857,11 @@ class Application
                 $followup_context = "Followup Message (id {$itil_followup['id']}) of {$context}";
                 $message = $this->exportItilFollowupAsMessage($itil_followup, $followup_context);
 
-                if ($message['content'] === '') {
+                if ($message['content'] === '' && $this->options['skip on error']) {
                     $this->warning("Skipping {$followup_context}: the message content is empty.");
                     continue;
+                } elseif ($message['content'] === '') {
+                    $this->error("{$followup_context} is invalid: the message content is empty.");
                 }
 
                 if ($message['createdById'] === null) {
