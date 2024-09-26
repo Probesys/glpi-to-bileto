@@ -668,7 +668,7 @@ class Application
                 }
             }
 
-            $contracts[] = [
+            $contract = [
                 'id' => $contract_id,
                 'name' => $name,
                 'startAt' => $start_at?->format(\DateTimeInterface::RFC3339),
@@ -681,8 +681,15 @@ class Application
                 'dateAlert' => $date_alert,
             ];
 
+            $contract = $this->callPluginsPreProcess($contract, 'contract');
 
-            $this->project_tasks_to_contracts[$project_task_id] = $contract_id;
+            if ($contract === null) {
+                continue;
+            }
+
+            $contracts[] = $contract;
+
+            $this->project_tasks_to_contracts[$project_task_id] = $contract['id'];
         }
 
         $contracts = $this->callPluginsPostProcess($contracts, 'contracts');
@@ -1400,7 +1407,7 @@ class Application
      * Call the given plugins "preProcess*" hook.
      *
      * @param mixed[] $data
-     * @param 'entity'|'user' $dataType
+     * @param 'entity'|'user'|'contract' $dataType
      * @return mixed[]|null
      */
     private function callPluginsPreProcess(array $data, string $dataType): ?array
