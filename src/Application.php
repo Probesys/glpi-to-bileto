@@ -321,6 +321,19 @@ class Application
             FROM glpi_users
         SQL);
 
+        // When a user is deleted, references are replaced by id 0. But there
+        // is no user with id 0, so we add a fake one in order to enable the
+        // plugins to hook on it. By default, as this user doesn't have an
+        // email, it will not be exported, but a plugin can add one.
+        $data[] = [
+            'id' => 0,
+            'name' => 'ghost',
+            'realname' => '',
+            'firstname' => '',
+            'entities_id' => 0,
+            'user_dn' => '',
+        ];
+
         $count = count($data);
         echo "{$count} users found\n";
 
