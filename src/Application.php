@@ -464,8 +464,12 @@ class Application
         SQL);
 
         $projects_to_contracts = $this->database->fetchKeyValue(<<<SQL
-            SELECT project_id, contract_id
-            FROM glpi_plugin_projectbridge_contracts
+            SELECT pb.project_id, pb.contract_id
+            FROM glpi_plugin_projectbridge_contracts pb,
+                 glpi_contracts c,
+                 glpi_projects p
+            WHERE pb.project_id = p.id
+            AND pb.contract_id = c.id
         SQL);
 
         $sql = <<<SQL
