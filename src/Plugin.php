@@ -41,6 +41,19 @@ class Plugin
     }
 
     /**
+     * Allow to modify a contract before it is processed.
+     *
+     * This can be used to remove a contract by returning null.
+     *
+     * @param mixed[] $contract
+     * @return mixed[]|null
+     */
+    public function preProcessContract(array $contract): ?array
+    {
+        return $contract;
+    }
+
+    /**
      * Allow to modify exported organizations.
      *
      * @param array<mixed[]> $organizations
