@@ -480,7 +480,7 @@ class Application
 
         $since = $this->options['since'];
         if ($since) {
-            $sql .= ' WHERE plan_end_date >= :since';
+            $sql .= ' WHERE plan_end_date >= :since OR plan_end_date IS NULL';
             $parameters[':since'] = $since->format('Y-m-d');
         }
 
@@ -575,8 +575,16 @@ class Application
 
             $contract = $contracts_by_ids[$contract_id];
 
-            $start_at = new \DateTimeImmutable($project_task['plan_start_date']);
-            $end_at = new \DateTimeImmutable($project_task['plan_end_date']);
+            $start_at = null;
+            if (isset($project_task['plan_start_date'])) {
+                $start_at = new \DateTimeImmutable($project_task['plan_start_date']);
+            }
+
+            $end_at = null;
+            if (isset($project_task['plan_end_date'])) {
+                $end_at = new \DateTimeImmutable($project_task['plan_end_date']);
+            }
+
             $date_alert = $contract['notice'] * 30;
 
             $name = $project['name'] . ' - ' . $project_task['name'];
@@ -607,8 +615,8 @@ class Application
             $contracts[] = [
                 'id' => $contract_id,
                 'name' => $name,
-                'startAt' => $start_at->format(\DateTimeInterface::RFC3339),
-                'endAt' => $end_at->format(\DateTimeInterface::RFC3339),
+                'startAt' => $start_at?->format(\DateTimeInterface::RFC3339),
+                'endAt' => $end_at?->format(\DateTimeInterface::RFC3339),
                 'maxHours' => intval($project_task['planned_duration'] / 60 / 60),
                 'notes' => $contract['comment'],
                 'organizationId' => $organization_id,
