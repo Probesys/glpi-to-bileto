@@ -228,6 +228,9 @@ class Application
             FROM glpi_entities
         SQL);
 
+        $count = count($data);
+        echo "{$count} entities found\n";
+
         $organizations = [];
         $names_to_ids = [];
 
@@ -263,8 +266,12 @@ class Application
         }
 
         $organizations = array_values($organizations);
+        $organizations = $this->callPluginsPostProcess($organizations, 'organizations');
 
-        return $this->callPluginsPostProcess($organizations, 'organizations');
+        $count = count($organizations);
+        echo "{$count} organizations exported\n";
+
+        return $organizations;
     }
 
     /**
@@ -279,6 +286,9 @@ class Application
             FROM glpi_profiles
         SQL);
 
+        $count = count($data);
+        echo "{$count} profiles found\n";
+
         $roles = [];
 
         foreach ($data as $profile) {
@@ -291,7 +301,12 @@ class Application
             ];
         }
 
-        return $this->callPluginsPostProcess($roles, 'roles');
+        $roles = $this->callPluginsPostProcess($roles, 'roles');
+
+        $count = count($roles);
+        echo "{$count} roles exported\n";
+
+        return $roles;
     }
 
     /**
@@ -305,6 +320,9 @@ class Application
             SELECT id, name, realname, firstname, entities_id, user_dn
             FROM glpi_users
         SQL);
+
+        $count = count($data);
+        echo "{$count} users found\n";
 
         $users = [];
         $emails_to_ids = [];
@@ -422,8 +440,12 @@ class Application
         }
 
         $users = array_values($users);
+        $users = $this->callPluginsPostProcess($users, 'users');
 
-        return $this->callPluginsPostProcess($users, 'users');
+        $count = count($users);
+        echo "{$count} users exported\n";
+
+        return $users;
     }
 
     /**
@@ -436,7 +458,15 @@ class Application
      */
     public function exportTeams(): array
     {
-        return $this->callPluginsPostProcess([], 'teams');
+        $count = 0;
+        echo "{$count} teams found\n";
+
+        $teams = $this->callPluginsPostProcess([], 'teams');
+
+        $count = count($teams);
+        echo "{$count} teams exported\n";
+
+        return $teams;
     }
 
     /**
@@ -484,6 +514,9 @@ class Application
         $statement = $this->database->prepare($sql);
         $statement->execute($parameters);
         $data = $statement->fetchAll();
+
+        $count = count($data);
+        echo "{$count} project tasks found\n";
 
         $contracts = [];
 
@@ -629,7 +662,12 @@ class Application
             $this->project_tasks_to_contracts[$project_task_id] = $contract_id;
         }
 
-        return $this->callPluginsPostProcess($contracts, 'contracts');
+        $contracts = $this->callPluginsPostProcess($contracts, 'contracts');
+
+        $count = count($contracts);
+        echo "{$count} contracts exported\n";
+
+        return $contracts;
     }
 
     /**
@@ -644,6 +682,9 @@ class Application
             FROM glpi_itilcategories
         SQL);
 
+        $count = count($data);
+        echo "{$count} categories found\n";
+
         $labels = [];
 
         foreach ($data as $category) {
@@ -655,7 +696,12 @@ class Application
             ];
         }
 
-        return $this->callPluginsPostProcess($labels, 'labels');
+        $labels = $this->callPluginsPostProcess($labels, 'labels');
+
+        $count = count($labels);
+        echo "{$count} labels exported\n";
+
+        return $labels;
     }
 
     /**
@@ -683,6 +729,9 @@ class Application
         $statement = $this->database->prepare($sql);
         $statement->execute($parameters);
         $data = $statement->fetchAll();
+
+        $count = count($data);
+        echo "{$count} tickets found\n";
 
         $tickets = [];
         foreach ($data as $ticket) {
@@ -932,7 +981,12 @@ class Application
             ];
         }
 
-        return $this->callPluginsPostProcess($tickets, 'tickets');
+        $tickets = $this->callPluginsPostProcess($tickets, 'tickets');
+
+        $count = count($tickets);
+        echo "{$count} tickets exported\n";
+
+        return $tickets;
     }
 
     /**
