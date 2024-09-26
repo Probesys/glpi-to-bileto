@@ -384,14 +384,14 @@ class Application
                         continue;
                     }
 
-                    $organization_id = $this->getOrganizationId($user_profile['entities_id'], context: $context);
+                    $organization_id = $this->getOrganizationId($user_profile['entities_id']);
 
                     if ($organization_id === null) {
-                        $this->warning(
-                            "Skipping {$context}:",
-                            "Entity (id {$user_profile['entities_id']}) doesn't exist.",
-                        );
-                        continue;
+                        $this->skipOrInvalid($context, "Entity (id {$user_profile['entities_id']}) doesn't exist.");
+
+                        if ($this->options['skip on error']) {
+                            continue;
+                        }
                     }
 
                     $authorizations[] = [
@@ -401,13 +401,10 @@ class Application
                 }
 
                 $context = "User {$name} (id {$glpi_user_id})";
-                $organization_id = $this->getOrganizationId($user['entities_id'], context: $context);
+                $organization_id = $this->getOrganizationId($user['entities_id']);
 
                 if ($organization_id === null) {
-                    $this->warning(
-                        "{$context} is invalid:",
-                        "Entity (id {$user['entities_id']}) doesn't exist (set to null).",
-                    );
+                    $this->warning("{$context}: Entity (id {$user['entities_id']}) doesn't exist, using null.");
                 }
 
                 $users[$user_id] = [
@@ -602,11 +599,14 @@ class Application
             }
 
             $context = "Contract (id {$contract_id})";
-            $organization_id = $this->getOrganizationId($contract['entities_id'], context: $context);
+            $organization_id = $this->getOrganizationId($contract['entities_id']);
 
             if ($organization_id === null) {
-                $this->warning("Skipping {$context}: Entity (id {$contract['entities_id']}) doesn't exist.");
-                continue;
+                $this->skipOrInvalid($context, "Entity (id {$contract['entities_id']}) doesn't exist.");
+
+                if ($this->options['skip on error']) {
+                    continue;
+                }
             }
 
             $project_task_id = intval($project_task['id']);
@@ -698,7 +698,7 @@ class Application
 
             $messages = [];
 
-            $message = $this->exportTicketAsMessage($ticket, $context);
+            $message = $this->exportTicketAsMessage($ticket);
             $created_by_id = $message['createdById'];
 
             if ($message['content'] === '') {
@@ -706,11 +706,9 @@ class Application
             }
 
             if ($created_by_id === null && $requester_id === null) {
+                $this->skipOrInvalid($context, 'author and requester Users do not exist.');
                 if ($this->options['skip on error']) {
-                    $this->warning("Skipping {$context}: author and requester Users don't exist.");
                     continue;
-                } else {
-                    $this->error("{$context} invalid: author and requester Users don't exist.");
                 }
             } elseif ($created_by_id === null) {
                 $this->warning("{$context}: author is not set, using requester by default.");
@@ -761,7 +759,7 @@ class Application
             foreach ($itil_solutions as $itil_solution) {
                 $solution_context = "Solution Message (id {$itil_solution['id']}) of {$context}";
 
-                $message = $this->exportItilSolutionAsMessage($itil_solution, $solution_context);
+                $message = $this->exportItilSolutionAsMessage($itil_solution);
 
                 if ($message['content'] === '') {
                     $this->warning("{$solution_context}: the message content is empty, using a default value.");
@@ -769,17 +767,17 @@ class Application
                 }
 
                 if ($message['createdById'] === null) {
-                    $this->warning(
-                        "Skipping {$solution_context}:",
-                        "User (id {$itil_solution['users_id']}) doesn't exist.",
-                    );
-                    continue;
+                    $this->skipOrInvalid($solution_context, "User (id {$itil_solution['users_id']}) doesn't exist.");
+
+                    if ($this->options['skip on error']) {
+                        continue;
+                    }
                 }
 
                 $messages[] = $message;
 
                 if ($itil_solution['status'] === 2 || $itil_solution['status'] === 3) {
-                    $solution_id = 'solution-' . $itil_solution['id'];
+                    $solution_id = $message['id'];
                 }
             }
 
@@ -797,14 +795,14 @@ class Application
                 $contract_ids = [];
 
                 foreach ($project_tasks_ids as $project_task_id) {
-                    $contract_id = $this->getContractId($project_task_id, $context);
+                    $contract_id = $this->getContractId($project_task_id);
 
                     if ($contract_id === null) {
-                        $this->warning(
-                            "Skipping {$context}:",
-                            "Project Task (id {$project_task_id}) doesn't exist.",
-                        );
-                        continue;
+                        $this->skipOrInvalid($context, "Project Task (id {$project_task_id}) doesn't exist.");
+
+                        if ($this->options['skip on error']) {
+                            continue;
+                        }
                     }
 
                     $contract_ids[] = $contract_id;
@@ -830,29 +828,29 @@ class Application
             foreach ($ticket_tasks as $ticket_task) {
                 $task_context = "Ticket Task (id {$ticket_task['id']}) of {$context}";
 
-                $message = $this->exportTicketTaskAsMessage($ticket_task, $task_context);
+                $message = $this->exportTicketTaskAsMessage($ticket_task);
 
                 if ($message['content'] !== '') {
                     if ($message['createdById'] === null) {
-                        $this->warning(
-                            "Skipping message related to {$task_context}:",
-                            "User (id {$ticket_task['users_id']}) doesn't exist.",
-                        );
-                        continue;
+                        $this->skipOrInvalid($task_context, "User (id {$ticket_task['users_id']}) doesn't exist.");
+
+                        if ($this->options['skip on error']) {
+                            continue;
+                        }
                     }
 
                     $messages[] = $message;
                 }
 
-                $time_spent = $this->exportTicketTaskAsTimeSpent($ticket_task, $task_context);
+                $time_spent = $this->exportTicketTaskAsTimeSpent($ticket_task);
 
                 if ($time_spent['time'] > 0) {
                     if ($time_spent['createdById'] === null) {
-                        $this->warning(
-                            "Skipping time spent related to {$task_context}:",
-                            "User (id {$ticket_task['users_id']}) doesn't exist.",
-                        );
-                        continue;
+                        $this->skipOrInvalid($task_context, "User (id {$ticket_task['users_id']}) doesn't exist.");
+
+                        if ($this->options['skip on error']) {
+                            continue;
+                        }
                     }
 
                     $time_spent['contractId'] = $contract_id;
@@ -871,21 +869,22 @@ class Application
 
             foreach ($itil_followups as $itil_followup) {
                 $followup_context = "Followup Message (id {$itil_followup['id']}) of {$context}";
-                $message = $this->exportItilFollowupAsMessage($itil_followup, $followup_context);
+                $message = $this->exportItilFollowupAsMessage($itil_followup);
 
-                if ($message['content'] === '' && $this->options['skip on error']) {
-                    $this->warning("Skipping {$followup_context}: the message content is empty.");
-                    continue;
-                } elseif ($message['content'] === '') {
-                    $this->error("{$followup_context} is invalid: the message content is empty.");
+                if ($message['content'] === '') {
+                    $this->skipOrInvalid($followup_context, 'The message content is empty.');
+
+                    if ($this->options['skip on error']) {
+                        continue;
+                    }
                 }
 
                 if ($message['createdById'] === null) {
-                    $this->warning(
-                        "Skipping {$followup_context}:",
-                        "User (id {$itil_followup['users_id']}) doesn't exist.",
-                    );
-                    continue;
+                    $this->skipOrInvalid($followup_context, "User (id {$itil_followup['users_id']}) doesn't exist.");
+
+                    if ($this->options['skip on error']) {
+                        continue;
+                    }
                 }
 
                 $messages[] = $message;
@@ -900,11 +899,14 @@ class Application
                 }
             }
 
-            $organization_id = $this->getOrganizationId($ticket['entities_id'], context: $context);
+            $organization_id = $this->getOrganizationId($ticket['entities_id']);
 
             if ($organization_id === null) {
-                $this->warning("Skipping {$context}: Entity (id {$ticket['entities_id']}) doesn't exist.");
-                continue;
+                $this->skipOrInvalid($context, "Entity (id {$ticket['entities_id']}) doesn't exist.");
+
+                if ($this->options['skip on error']) {
+                    continue;
+                }
             }
 
             $tickets[] = [
@@ -940,7 +942,7 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportTicketAsMessage(array $ticket, string $context): array
+    public function exportTicketAsMessage(array $ticket): array
     {
         $date_creation = $ticket['date_creation'] ?? $ticket['date'];
         $created_at = new \DateTimeImmutable($date_creation);
@@ -952,7 +954,7 @@ class Application
         return [
             'id' => "ticket-{$ticket['id']}",
             'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => $this->getUserId($ticket['users_id_recipient'], $context),
+            'createdById' => $this->getUserId($ticket['users_id_recipient']),
             'isConfidential' => false,
             'via' => $via,
             'emailId' => $this->getEmailId($ticket['id']),
@@ -968,7 +970,7 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportItilSolutionAsMessage(array $itil_solution, string $context): array
+    public function exportItilSolutionAsMessage(array $itil_solution): array
     {
         $created_at = new \DateTimeImmutable($itil_solution['date_creation']);
         $document_items = $this->fetchDocumentItems('ITILSolution', $itil_solution['id']);
@@ -978,7 +980,7 @@ class Application
         return [
             'id' => "solution-{$itil_solution['id']}",
             'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => $this->getUserId($itil_solution['users_id'], $context),
+            'createdById' => $this->getUserId($itil_solution['users_id']),
             'isConfidential' => false,
             'via' => 'webapp',
             'emailId' => $this->getEmailId($itil_solution['tickets_id']),
@@ -994,7 +996,7 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportTicketTaskAsTimeSpent(array $ticket_task, string $context): array
+    public function exportTicketTaskAsTimeSpent(array $ticket_task): array
     {
         $date_creation = $ticket_task['date_creation'] ?? $ticket_task['date'];
         $created_at = new \DateTimeImmutable($date_creation);
@@ -1002,7 +1004,7 @@ class Application
 
         return [
             'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => $this->getUserId($ticket_task['users_id'], $context),
+            'createdById' => $this->getUserId($ticket_task['users_id']),
             'time' => $time,
             'realTime' => $time,
         ];
@@ -1015,7 +1017,7 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportTicketTaskAsMessage(array $ticket_task, string $context): array
+    public function exportTicketTaskAsMessage(array $ticket_task): array
     {
         $date_creation = $ticket_task['date_creation'] ?? $ticket_task['date'];
         $created_at = new \DateTimeImmutable($date_creation);
@@ -1026,7 +1028,7 @@ class Application
         return [
             'id' => "ticket-task-{$ticket_task['id']}",
             'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => $this->getUserId($ticket_task['users_id'], $context),
+            'createdById' => $this->getUserId($ticket_task['users_id']),
             'isConfidential' => $ticket_task['is_private'] === 1,
             'via' => 'webapp',
             'emailId' => $this->getEmailId($ticket_task['tickets_id']),
@@ -1042,7 +1044,7 @@ class Application
      *
      * @return mixed[]
      */
-    public function exportItilFollowupAsMessage(array $itil_followup, string $context): array
+    public function exportItilFollowupAsMessage(array $itil_followup): array
     {
         $date_creation = $itil_followup['date_creation'] ?? $itil_followup['date'];
         $created_at = new \DateTimeImmutable($date_creation);
@@ -1054,7 +1056,7 @@ class Application
         return [
             'id' => "followup-{$itil_followup['id']}",
             'createdAt' => $created_at->format(\DateTimeInterface::RFC3339),
-            'createdById' => $this->getUserId($itil_followup['users_id'], $context),
+            'createdById' => $this->getUserId($itil_followup['users_id']),
             'isConfidential' => $itil_followup['is_private'] === 1,
             'via' => $via,
             'emailId' => $this->getEmailId($itil_followup['tickets_id']),
@@ -1121,19 +1123,9 @@ class Application
      *
      * It is especially useful when organizations are merged by names.
      */
-    private function getOrganizationId(int $entity_id, string $context): ?string
+    private function getOrganizationId(int $entity_id): ?string
     {
-        if (!isset($this->entities_to_orgas[$entity_id]) && !$this->options['skip on error']) {
-            $this->error("{$context} is invalid: Entity (id {$entity_id}) doesn't exist.");
-
-            $organization_id = strval($entity_id);
-            $this->entities_to_orgas[$entity_id] = $organization_id;
-            return $organization_id;
-        } elseif (!isset($this->entities_to_orgas[$entity_id])) {
-            return null;
-        }
-
-        return $this->entities_to_orgas[$entity_id];
+        return $this->entities_to_orgas[$entity_id] ?? null;
     }
 
     /**
@@ -1141,37 +1133,17 @@ class Application
      *
      * It is especially useful when users are merged by emails.
      */
-    private function getUserId(int $glpi_user_id, string $context): ?string
+    private function getUserId(int $glpi_user_id): ?string
     {
-        if (!isset($this->glpi_users_to_users[$glpi_user_id]) && !$this->options['skip on error']) {
-            $this->error("{$context} is invalid: User (id {$glpi_user_id}) doesn't exist.");
-
-            $user_id = strval($glpi_user_id);
-            $this->glpi_users_to_users[$glpi_user_id] = $user_id;
-            return $user_id;
-        } elseif (!isset($this->glpi_users_to_users[$glpi_user_id])) {
-            return null;
-        }
-
-        return $this->glpi_users_to_users[$glpi_user_id];
+        return $this->glpi_users_to_users[$glpi_user_id] ?? null;
     }
 
     /**
      * Return the (Bileto) contract id corresponding to the given (GLPI) project task id.
      */
-    private function getContractId(int $project_task_id, string $context): ?string
+    private function getContractId(int $project_task_id): ?string
     {
-        if (!isset($this->project_tasks_to_contracts[$project_task_id]) && !$this->options['skip on error']) {
-            $this->error("{$context} is invalid: Project Task (id {$project_task_id}) doesn't exist.");
-
-            $contract_id = strval($project_task_id);
-            $this->project_tasks_to_contracts[$project_task_id] = $contract_id;
-            return $contract_id;
-        } elseif (!isset($this->project_tasks_to_contracts[$project_task_id])) {
-            return null;
-        }
-
-        return $this->project_tasks_to_contracts[$project_task_id];
+        return $this->project_tasks_to_contracts[$project_task_id] ?? null;
     }
 
     /**
@@ -1202,11 +1174,14 @@ class Application
         $actor_context = "Actor of {$context}";
 
         foreach ($ticket_users as $ticket_user) {
-            $user_id = $this->getUserId($ticket_user['users_id'], $actor_context);
+            $user_id = $this->getUserId($ticket_user['users_id']);
 
             if ($user_id === null) {
-                $this->warning("Skipping {$actor_context}: User {$ticket_user['users_id']} doesn't exist.");
-                continue;
+                $this->skipOrInvalid($actor_context, "User {$ticket_user['users_id']} doesn't exist.");
+
+                if ($this->options['skip on error']) {
+                    continue;
+                }
             }
 
             if ($ticket_user['type'] === 1 && $requester_id === null) {
@@ -1217,6 +1192,10 @@ class Application
                 $observer_ids[] = $user_id;
             }
         }
+
+        $observer_ids = array_filter($observer_ids, function ($observer_id) {
+            return $observer_id !== null;
+        });
 
         return [$requester_id, $assignee_id, $observer_ids];
     }
@@ -1403,5 +1382,14 @@ class Application
         $message = implode(' ', $message_parts);
 
         echo "[Warning] {$message}\n";
+    }
+
+    private function skipOrInvalid(string $context, string $error): void
+    {
+        if ($this->options['skip on error']) {
+            $this->warning("Skipping {$context}: {$error}");
+        } else {
+            $this->error("{$context} invalid: {$error}");
+        }
     }
 }
