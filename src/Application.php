@@ -690,17 +690,35 @@ class Application
 
             $title = html_entity_decode($ticket['name']);
 
+            list(
+                $requester_id,
+                $assignee_id,
+                $observer_ids,
+            ) = $this->fetchTicketActors($ticket, $context);
+
             $messages = [];
 
             $message = $this->exportTicketAsMessage($ticket, $context);
+            $created_by_id = $message['createdById'];
 
             if ($message['content'] === '') {
                 $message['content'] = $title;
             }
 
-            if ($message['createdById'] === null) {
-                $this->warning("Skipping {$context}: User (id {$ticket['users_id_recipient']}) doesn't exist.");
-                continue;
+            if ($created_by_id === null && $requester_id === null) {
+                if ($this->options['skip on error']) {
+                    $this->warning("Skipping {$context}: author and requester Users don't exist.");
+                    continue;
+                } else {
+                    $this->error("{$context} invalid: author and requester Users don't exist.");
+                }
+            } elseif ($created_by_id === null) {
+                $this->warning("{$context}: author is not set, using requester by default.");
+                $created_by_id = $requester_id;
+                $message['createdById'] = $created_by_id;
+            } elseif ($requester_id === null) {
+                $this->warning("{$context}: requester is not set, using author by default.");
+                $requester_id = $created_by_id;
             }
 
             $messages[] = $message;
@@ -708,20 +726,6 @@ class Application
             $date_creation = $ticket['date_creation'] ?? $ticket['date'];
             $created_at = new \DateTimeImmutable($date_creation);
             $updated_at = $created_at;
-            $created_by_id = $message['createdById'];
-
-            list(
-                $requester_id,
-                $assignee_id,
-                $observer_ids,
-            ) = $this->fetchTicketActors($ticket, $context);
-
-            if ($requester_id === null && $this->options['skip on error']) {
-                $this->warning("Skipping {$context}: Requester is not set.");
-                continue;
-            } elseif ($requester_id === null) {
-                $this->error("{$context} is invalid: Requester is not set.");
-            }
 
             if ($ticket['type'] === 1) {
                 $type = 'incident';
