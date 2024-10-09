@@ -407,12 +407,10 @@ class Application
                     $context = "User Profile (id {$user_profile['id']}) of User {$name} (id {$glpi_user_id})";
 
                     if ($user_profile['is_recursive']) {
-                        if ($this->options['skip on error']) {
-                            $this->warning("Skipping {$context}: no support for GLPI recursive profiles.");
-                        } else {
-                            $this->error("Skipping {$context}: no support for GLPI recursive profiles.");
-                        }
-                        continue;
+                        $this->warning(
+                            "{$context}: recursive profiles are not supported by Bileto,",
+                            'exporting as non-recursive.'
+                        );
                     }
 
                     $organization_id = $this->getOrganizationId($user_profile['entities_id']);
