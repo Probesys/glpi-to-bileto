@@ -110,7 +110,7 @@ Incompatibilities (this is the fun part!):
 - GLPI allows sub-entities, while sub-organizations don't exist anymore in Bileto. Sub-entities are "root" organizations then.
 - We merge the organizations which have the same names (because they represent the same customer).
 - Permissions are very different in GLPI and Bileto, even if they are handled by similar objects (Profile / Role). Also, Bileto defines role types (admin / agent / user) which don't exist in GLPI profiles. This requires manual editing of the `roles.json` file to add a description (if missing), a type and Bileto permissions.
-- On the same topic, agent authorizations are handled by teams in Bileto. The export command ignores recursive authorizations (which are in most cases given to agents), while it exports the non-recursive authorizations (more numerous, and most probably assigned to end users).
+- On the same topic, recursive authorizations are not supported in Bileto, so we export recursive profiles as non-recursive authorizations.
 - Users can have several emails in GLPI, but only one in Bileto. We pick the default email from GLPI.
 - GLPI has several fields corresponding to the name of the users. If `realname` and/or `firstname` is set, we use these values. Otherwise, we pick the `name` value. The `nickname` is ignored.
 - LDAP identifiers are handled quite differently. If GLPI `user_dn` value is set, we consider that the LDAP identifier that can be used in Bileto is the `name` value.
