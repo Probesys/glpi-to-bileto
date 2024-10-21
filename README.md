@@ -1,11 +1,26 @@
-# GLPI To Bileto
+# GLPI To Bileto (GTB)
 
 This project aims to export GLPI data into a ZIP file for import into Bileto.
 
 - GLPI: [glpi-project.org](https://glpi-project.org/)
 - Bileto: [bileto.fr](https://bileto.fr/)
 
-## How to use
+## Getting started
+
+### Install GLPI To Bileto
+
+You have to decide where you'll install GLPI To Bileto (GTB) first.
+It must have access to the database that host the GLPI data.
+If your computer has a direct access to the database, you can install GTB on it.
+Otherwise, you may need to install it on the server that host the database.
+A last option, is to create a SQL dump of your database, and reimport it on your computer (see below).
+
+Then, clone the repository:
+
+```console
+$ git clone https://gitlab.probesys.com/bileto/glpi-to-bileto.git
+$ cd glpi-to-bileto
+```
 
 ### With a running database
 
@@ -54,8 +69,134 @@ DB_PASSWORD = mariadb
 Then, run the command:
 
 ```console
-$ ./bin/glpi-export
+$ ./docker/bin/glpi-export
 ```
+
+### Command options
+
+The `glpi-export` command accepts several options:
+
+- `--help -h`: display the help message.
+- `--dry-run`: simulate an export, but do not write the archive. It's useful to test different options without being overwhelmed by the archives.
+- `--merge-organizations`: merge the organizations having the same name. You may need this option to export data compatible with Bileto.
+- `--merge-users`: merge the users having the same email. You may need this option to export data compatible with Bileto.
+- `--since=[YYYY-MM-DD]`: export tickets and contracts after the given date.
+- `--skip-on-error`: skip data concerned by an error. This makes the archive more probably compatible with Bileto, but data concerned by an error will not be exported.
+- `--no-warning`: do not display the warnings. It's useful once you know that remaining warnings are not a problem.
+- `--hostname`: set the GLPI hostname. It is required if you want to be able to link emails answering to GLPI notifications with the tickets imported on your future Bileto server.
+- `--ignore-contracts`: do not export the contracts. You need it if you don't use our plugin [ProjectBridge](https://github.com/Probesys/glpi-plugins-projectbridge).
+
+For instance, to export data in the best compatible way with Bileto:
+
+```console
+$ ./bin/glpi-export --merge-organizations --merge-users --ignore-contracts --skip-on-error
+```
+
+At Probesys, we most often use the command (almost) like this:
+
+```console
+$ ./bin/glpi-export --merge-organizations --merge-users --hostname=glpi.example.com --since=2024-01-01 --skip-on-error
+```
+
+### Include the documents in the archive
+
+There is no way to include the files uploaded to GLPI in the archive yet with GTB.
+You need to do it manually.
+Bileto expects the files to be placed in a `documents/` folder in the archive.
+
+Once you've exported the data from the database, put the GLPI files in your current directory and rename the folder into `documents/`:
+
+```console
+$ cp -R /path/to/glpi/files documents/
+```
+
+Then, add the GLPI files to the archive:
+
+```console
+$ zip -r 2024-10-21_14h00_glpi_data.zip documents/
+```
+
+Don't worry about cleaning the files first: Bileto only imports the files that are actually referenced by the imported tickets.
+
+### Customize the exportation with plugins
+
+You can create a plugin that will be able to connect to different parts of the script in order to alter the final exportation.
+For this, create a folder under the `plugins/` folder:
+
+```console
+$ mkdir plugins/MyPlugin
+```
+
+Then, in this folder, create a `Plugin.php` file.
+The class in it must extend the [`Plugin` class](/src/Plugin.php) and must be in a namespace named after the folder name:
+
+```php
+<?php
+
+namespace Plugin\MyPlugin;
+
+class Plugin extends \App\Plugin
+{
+}
+```
+
+There are various hooks available, take a look at the [`Plugin`](/src/Plugin.php) class for the whole list.
+
+For instance, you can delete the "Root entity" (with the entity id 0) as it has no meaning in Bileto.
+
+```php
+<?php
+
+namespace Plugin\MyPlugin;
+
+class Plugin extends \App\Plugin
+{
+    public function preProcessEntity(array $entity): ?array
+    {
+        if ($entity['id'] === 0) {
+            // Return null to remove an entity
+            return null;
+        } else {
+            return $entity;
+        }
+    }
+}
+```
+
+You can also add a final message to all your tickets in order to give the link to your archived GLPI:
+
+```php
+<?php
+
+namespace Plugin\MyPlugin;
+
+class Plugin extends \App\Plugin
+{
+    public function postProcessTickets(array $tickets): array
+    {
+        return array_map(function ($ticket) {
+            $now = new \DateTimeImmutable();
+            $tech_user_id = '1'; // This should be the id of the agent who will perform the migration
+            $glpi_host = 'https://glpi.example.com';
+            $url = "https://{$glpi_host}/front/ticket.form.php?id={$ticket['id']}";
+
+            $message_migration = [
+                'id' => "migration-{$ticket['id']}",
+                'createdAt' => $now->format(\DateTimeInterface::RFC3339),
+                'createdById' => $tech_user_id,
+                'isConfidential' => true,
+                'content' => "<p>Ticket migrated from GLPI&nbsp;: <a href=\"{$url}\">go to ticket #{$ticket['id']}</a>.</p>",
+            ];
+
+            $ticket['messages'][] = $message_migration;
+
+            return $ticket;
+        }, $tickets);
+    }
+}
+```
+
+These are just a few examples, but the plugins are powerful enough to adapt the export to your own needs.
 
 ## Development
 
@@ -127,83 +268,3 @@ Incompatibilities (this is the fun part!):
 - There are different kind of messages in GLPI: followup, tasks and solutions. The ticket also holds content. It means that each of these items must be exported as Messages in Bileto. A consequence is that we cannot use the ids directly (i.e. a followup and a task may have the same id!). In this case, we prepend the ids by the type of the initial object.
 - Spent times are handled through TicketTasks in GLPI. Unfortunately, there are no differences between accounted time and worked time (i.e. the concept of "time accounting unit"). We just export the `actiontime` for both values in Bileto. Also this value is converted from seconds to minutes.
 - The source of the messages (i.e. `via`) is configurable in GLPI, but it's not in Bileto (only `webapp` and `email` are actually available). We export the GLPI Ticket RequestType and test the value (i.e. if `request_type.name = email`, the source is "email", and "webapp" otherwise).
-
-## Customize the exportation with plugins
-
-You can create a plugin that will be able to connect to different parts of the script in order to alter the final exportation.
-For this, create a folder under the `plugins/` folder:
-
-```console
-$ mkdir plugins/MyPlugin
-```
-
-Then, in this folder, create a `Plugin.php` file.
-The class in it must extends the [`Plugin` class](/src/Plugin.php) and must be in a namespace named after the folder name:
-
-```php
-<?php
-
-namespace Plugin\MyPlugin;
-
-class Plugin extends \App\Plugin
-{
-}
-```
-
-There are various hooks available, take a look at the `Plugin` class.
-
-For instance, you can delete the "Root entity" (with the entity id 0) as it has no meaning in Bileto.
-
-```php
-<?php
-
-namespace Plugin\MyPlugin;
-
-class Plugin extends \App\Plugin
-{
-    public function preProcessEntity(array $entity): ?array
-    {
-        if ($entity['id'] === 0) {
-            // Return null to remove an entity
-            return null;
-        } else {
-            return $entity;
-        }
-    }
-}
-```
-
-You can also add a final message to all your tickets in order to give the link to your archived GLPI:
-
-```php
-<?php
-
-namespace Plugin\MyPlugin;
-
-class Plugin extends \App\Plugin
-{
-    public function postProcessTickets(array $tickets): array
-    {
-        return array_map(function ($ticket) {
-            $now = new \DateTimeImmutable();
-            $tech_user_id = '1'; // This should be the id of the agent who will perform the migration
-            $glpi_host = 'https://glpi.example.com';
-            $url = "https://{$glpi_host}/front/ticket.form.php?id={$ticket['id']}";
-
-            $message_migration = [
-                'id' => "migration-{$ticket['id']}",
-                'createdAt' => $now->format(\DateTimeInterface::RFC3339),
-                'createdById' => $tech_user_id,
-                'isConfidential' => true,
-                'content' => "<p>Ticket migrated from GLPI&nbsp;: <a href=\"{$url}\">go to ticket #{$ticket['id']}</a>.</p>",
-            ];
-
-            $ticket['messages'][] = $message_migration;
-
-            return $ticket;
-        }, $tickets);
-    }
-}
-```
-
-These are just a few examples, but the plugins are powerful enough to adapt the export to your own needs.
