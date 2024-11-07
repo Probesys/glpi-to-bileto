@@ -8,6 +8,11 @@ namespace App;
 
 class Plugin
 {
+    public function __construct(
+        protected Database $database,
+    ) {
+    }
+
     /**
      * Allow to modify an entity before it is processed.
      *

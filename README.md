@@ -198,6 +198,28 @@ class Plugin extends \App\Plugin
 
 These are just a few examples, but the plugins are powerful enough to adapt the export to your own needs.
 
+The plugins also have access to the database, for instance:
+
+```php
+<?php
+
+namespace Plugin\MyPlugin;
+
+class Plugin extends \App\Plugin
+{
+    public function postProcessTickets(array $tickets): array
+    {
+        $initialData = $this->database->fetchAll('SELECT * FROM glpi_tickets');
+
+        // Do something with tickets…
+
+        return $tickets;
+    }
+}
+```
+
+The database has some useful methods, take a look at the [`Database`](/src/Database.php) class for more information.
+
 ## Development
 
 Build the Docker image:

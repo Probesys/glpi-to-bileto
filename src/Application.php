@@ -1391,7 +1391,7 @@ class Application
             }
 
             $plugin_class = "\\Plugin\\{$folder}\\Plugin";
-            $plugin = new $plugin_class();
+            $plugin = new $plugin_class($this->database);
 
             if ($plugin instanceof Plugin) {
                 $plugins[] = $plugin;
