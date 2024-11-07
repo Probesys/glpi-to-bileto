@@ -33,7 +33,8 @@ docker-db-import: ## Import a SQL file from GLPI
 ifndef FILE
 	$(error You need to provide a "FILE" argument)
 endif
-	./docker/bin/mariadb < $(FILE)
+	./docker/bin/mariadb -e 'DROP DATABASE IF EXISTS glpi; CREATE DATABASE glpi;'
+	./docker/bin/mariadb glpi < $(FILE)
 
 .PHONY: install
 install: ## Install the development dependencies
