@@ -220,6 +220,12 @@ class Plugin extends \App\Plugin
 
 The database has some useful methods, take a look at the [`Database`](/src/Database.php) class for more information.
 
+If you want to publish your plugin(s), please fix the potential issues raised by the linters with:
+
+```console
+$ make lint
+```
+
 ## Development
 
 Build the Docker image:

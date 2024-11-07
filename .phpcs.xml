@@ -4,6 +4,7 @@
 
     <file>bin/glpi-export</file>
     <file>src</file>
+    <file>plugins</file>
 
     <arg name="extensions" value="php" />
 
