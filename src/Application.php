@@ -449,17 +449,37 @@ class Application
             $this->glpi_users_to_users[$glpi_user_id] = $user_id;
         }
 
-        $emails_no_user = $this->database->fetchValues(<<<SQL
+        $parameters = [];
+
+        $sql = <<<SQL
             SELECT DISTINCT u.alternative_email
             FROM glpi_tickets_users u
+
+            INNER JOIN glpi_tickets t
+            ON t.id = u.tickets_id
+
             WHERE u.users_id = 0
-        SQL);
+        SQL;
+
+        $since = $this->options['since'];
+        if ($since) {
+            $sql .= ' AND t.date_creation >= ? OR t.date >= ?';
+            $parameters[] = $since->format('Y-m-d');
+            $parameters[] = $since->format('Y-m-d');
+        }
+
+        $emails_no_user = $this->database->fetchValues($sql, $parameters);
 
         $count = count($emails_no_user);
         echo "{$count} additional emails found\n";
 
         foreach ($emails_no_user as $email) {
             $email = trim(strtolower($email));
+
+            if (!$email) {
+                continue;
+            }
+
             $glpi_user_id = $email;
             $user_id = $email;
 
