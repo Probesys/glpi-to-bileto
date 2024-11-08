@@ -59,6 +59,22 @@ class Plugin
     }
 
     /**
+     * Allow to modify a ticket before it is processed.
+     *
+     * This can be used to transfer a ticket to another entity for instance, by
+     * changing the $ticket['entities_id'].
+     *
+     * It also can be used to remove a ticket by returning null.
+     *
+     * @param mixed[] $ticket
+     * @return mixed[]|null
+     */
+    public function preProcessTicket(array $ticket): ?array
+    {
+        return $ticket;
+    }
+
+    /**
      * Allow to modify exported organizations.
      *
      * @param array<mixed[]> $organizations

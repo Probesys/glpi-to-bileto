@@ -765,6 +765,12 @@ class Application
         foreach ($data as $ticket) {
             $context = "Ticket (id {$ticket['id']})";
 
+            $ticket = $this->callPluginsPreProcess($ticket, 'ticket');
+
+            if ($ticket === null) {
+                continue;
+            }
+
             $title = html_entity_decode($ticket['name']);
 
             list(
@@ -1405,7 +1411,7 @@ class Application
      * Call the given plugins "preProcess*" hook.
      *
      * @param mixed[] $data
-     * @param 'entity'|'user'|'contract' $dataType
+     * @param 'entity'|'user'|'contract'|'ticket' $dataType
      * @return mixed[]|null
      */
     private function callPluginsPreProcess(array $data, string $dataType): ?array
