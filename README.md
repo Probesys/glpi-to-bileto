@@ -282,6 +282,7 @@ Incompatibilities (this is the fun part!):
 - On the same topic, recursive authorizations are not supported in Bileto, so we export recursive profiles as non-recursive authorizations.
 - Users can have several emails in GLPI, but only one in Bileto. We pick the default email from GLPI.
 - GLPI has several fields corresponding to the name of the users. If `realname` and/or `firstname` is set, we use these values. Otherwise, we pick the `name` value. The `nickname` is ignored.
+- Emails can be added to tickets without being associated to a user in GLPI: we detect and export these emails as users.
 - LDAP identifiers are handled quite differently. If GLPI `user_dn` value is set, we consider that the LDAP identifier that can be used in Bileto is the `name` value.
 - Bileto only provides English and French locales. We won't export this value and we set `fr_FR` for all the users.
 - In GLPI, our contracts are a combination of ProjectTask, PluginProjectbridgeContract, PluginProjectbridgeContractQuotaAlert, Project and Contract. As surprising as it is, it's not too challenging to transform all of these into a single Contract entity in Bileto. It requires some attention still:

@@ -31,7 +31,7 @@ class Application
     /** @var array<int, string> */
     private array $entities_to_orgas;
 
-    /** @var array<int, string> */
+    /** @var array<int|string, string> */
     private array $glpi_users_to_users;
 
     /** @var array<int, string> */
@@ -444,6 +444,44 @@ class Application
                     'organizationId' => $organization_id,
                     'authorizations' => $authorizations,
                 ];
+            }
+
+            $this->glpi_users_to_users[$glpi_user_id] = $user_id;
+        }
+
+        $emails_no_user = $this->database->fetchValues(<<<SQL
+            SELECT DISTINCT u.alternative_email
+            FROM glpi_tickets_users u
+            WHERE u.users_id = 0
+        SQL);
+
+        $count = count($emails_no_user);
+        echo "{$count} additional emails found\n";
+
+        foreach ($emails_no_user as $email) {
+            $email = trim(strtolower($email));
+            $glpi_user_id = $email;
+            $user_id = $email;
+
+            $user = [
+                'id' => $glpi_user_id,
+                'email' => $email,
+            ];
+
+            $user = $this->callPluginsPreProcess($user, 'user');
+
+            if ($user === null) {
+                continue;
+            }
+
+            if (isset($emails_to_ids[$email])) {
+                $user_id = $emails_to_ids[$email];
+            } else {
+                $emails_to_ids[$email] = $user_id;
+            }
+
+            if (!isset($users[$user_id])) {
+                $users[$user_id] = $user;
             }
 
             $this->glpi_users_to_users[$glpi_user_id] = $user_id;
@@ -1220,7 +1258,7 @@ class Application
      *
      * It is especially useful when users are merged by emails.
      */
-    private function getUserId(int $glpi_user_id): ?string
+    private function getUserId(int|string $glpi_user_id): ?string
     {
         return $this->glpi_users_to_users[$glpi_user_id] ?? null;
     }
@@ -1251,7 +1289,7 @@ class Application
         $observer_ids = [];
 
         $ticket_users = $this->database->fetchAll(<<<SQL
-            SELECT type, users_id
+            SELECT type, users_id, alternative_email
             FROM glpi_tickets_users
             WHERE tickets_id = :ticket_id
         SQL, [
@@ -1261,7 +1299,12 @@ class Application
         $actor_context = "Actor of {$context}";
 
         foreach ($ticket_users as $ticket_user) {
-            $user_id = $this->getUserId($ticket_user['users_id']);
+            $glpi_user_id = $ticket_user['users_id'];
+            if ($glpi_user_id === 0) {
+                $glpi_user_id = trim($ticket_user['alternative_email']);
+            }
+
+            $user_id = $this->getUserId($glpi_user_id);
 
             if ($user_id === null) {
                 $this->skipOrInvalid($actor_context, "User {$ticket_user['users_id']} doesn't exist.");
