@@ -439,7 +439,6 @@ class Application
                 $users[$user_id] = [
                     'id' => $user_id,
                     'email' => $email,
-                    'locale' => 'fr_FR',
                     'name' => $name,
                     'ldapIdentifier' => $ldap_identifier,
                     'organizationId' => $organization_id,
