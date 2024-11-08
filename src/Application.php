@@ -559,9 +559,7 @@ class Application
             $parameters[':since'] = $since->format('Y-m-d');
         }
 
-        $statement = $this->database->prepare($sql);
-        $statement->execute($parameters);
-        $data = $statement->fetchAll();
+        $data = $this->database->fetchAll($sql, $parameters);
 
         $count = count($data);
         echo "{$count} project tasks found\n";
@@ -791,9 +789,7 @@ class Application
             $parameters[] = $since->format('Y-m-d');
         }
 
-        $statement = $this->database->prepare($sql);
-        $statement->execute($parameters);
-        $data = $statement->fetchAll();
+        $data = $this->database->fetchAll($sql, $parameters);
 
         $count = count($data);
         echo "{$count} tickets found\n";

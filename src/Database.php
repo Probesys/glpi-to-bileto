@@ -76,7 +76,7 @@ class Database
     /**
      * Fetch all the data corresponding to the given SQL request.
      *
-     * @param array<string, mixed> $parameters
+     * @param array<string|int, mixed> $parameters
      *
      * @return array<array<string, mixed>>
      */
@@ -91,7 +91,7 @@ class Database
      * Fetch the data corresponding to the given SQL request. The results are
      * indexed by the first selected column.
      *
-     * @param array<string, mixed> $parameters
+     * @param array<string|int, mixed> $parameters
      *
      * @return array<mixed, array<string, mixed>>
      */
@@ -106,7 +106,7 @@ class Database
      * Fetch the data corresponding to the given SQL request. You must select
      * two columns: the first is used as key of the returned array.
      *
-     * @param array<string, mixed> $parameters
+     * @param array<string|int, mixed> $parameters
      *
      * @return array<mixed, mixed>
      */
@@ -122,7 +122,7 @@ class Database
      * one column for a single result (e.g. selecting the "name" column of a
      * specific "id").
      *
-     * @param array<string, mixed> $parameters
+     * @param array<string|int, mixed> $parameters
      */
     public function fetchValue(string $sql, array $parameters = []): mixed
     {
@@ -135,7 +135,7 @@ class Database
      * Fetch a column corresponding to the SQL request. You must select one
      * column (e.g. selecting the "name" column)
      *
-     * @param array<string, mixed> $parameters
+     * @param array<string|int, mixed> $parameters
      */
     public function fetchValues(string $sql, array $parameters = []): mixed
     {
