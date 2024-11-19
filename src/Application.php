@@ -494,6 +494,9 @@ class Application
                 continue;
             }
 
+            $user_id = strval($user['id']);
+            $email = $user['email'];
+
             if (isset($emails_to_ids[$email])) {
                 $user_id = $emails_to_ids[$email];
             } else {
