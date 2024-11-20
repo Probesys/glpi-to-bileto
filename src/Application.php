@@ -1101,7 +1101,7 @@ class Application
             'createdById' => $this->getUserId($ticket['users_id_recipient']),
             'isConfidential' => false,
             'via' => $via,
-            'emailId' => $this->getEmailId($ticket['id']),
+            'notificationsReferences' => $this->getGlpiTicketReference($ticket['id']),
             'content' => $content,
             'messageDocuments' => $message_documents,
         ];
@@ -1127,7 +1127,7 @@ class Application
             'createdById' => $this->getUserId($itil_solution['users_id']),
             'isConfidential' => false,
             'via' => 'webapp',
-            'emailId' => $this->getEmailId($itil_solution['tickets_id']),
+            'notificationsReferences' => $this->getGlpiTicketReference($itil_solution['tickets_id']),
             'content' => $content,
             'messageDocuments' => $message_documents,
         ];
@@ -1175,7 +1175,7 @@ class Application
             'createdById' => $this->getUserId($ticket_task['users_id']),
             'isConfidential' => $ticket_task['is_private'] === 1,
             'via' => 'webapp',
-            'emailId' => $this->getEmailId($ticket_task['tickets_id']),
+            'notificationsReferences' => $this->getGlpiTicketReference($ticket_task['tickets_id']),
             'content' => $content,
             'messageDocuments' => $message_documents,
         ];
@@ -1203,7 +1203,7 @@ class Application
             'createdById' => $this->getUserId($itil_followup['users_id']),
             'isConfidential' => $itil_followup['is_private'] === 1,
             'via' => $via,
-            'emailId' => $this->getEmailId($itil_followup['tickets_id']),
+            'notificationsReferences' => $this->getGlpiTicketReference($itil_followup['tickets_id']),
             'content' => $content,
             'messageDocuments' => $message_documents,
         ];
@@ -1392,10 +1392,13 @@ class Application
         }
     }
 
-    private function getEmailId(int $ticket_id): ?string
+    /**
+     * @return string[]
+     */
+    private function getGlpiTicketReference(int $ticket_id): array
     {
         if ($this->options['hostname'] === null) {
-            return null;
+            return [];
         }
 
         $hostname = $this->options['hostname'];
@@ -1408,7 +1411,7 @@ class Application
             SQL);
         }
 
-        return "GLPI_{$this->notification_uuid}-Ticket-{$ticket_id}@{$hostname}";
+        return ["glpi:GLPI_{$this->notification_uuid}-Ticket-{$ticket_id}@{$hostname}"];
     }
 
     /**
