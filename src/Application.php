@@ -319,6 +319,7 @@ class Application
         $data = $this->database->fetchAll(<<<SQL
             SELECT id, name, realname, firstname, entities_id, user_dn
             FROM glpi_users
+            WHERE is_deleted = false
         SQL);
 
         // When a user is deleted, references are replaced by id 0. But there
@@ -459,6 +460,7 @@ class Application
             ON t.id = u.tickets_id
 
             WHERE u.users_id = 0
+            AND t.is_deleted = false
         SQL;
 
         $since = $this->options['since'];
@@ -802,12 +804,13 @@ class Application
                 urgency, impact, priority, entities_id, requesttypes_id,
                 itilcategories_id
             FROM glpi_tickets
+            WHERE is_deleted = false
         SQL;
         $parameters = [];
 
         $since = $this->options['since'];
         if ($since) {
-            $sql .= ' WHERE date_creation >= ? OR date >= ?';
+            $sql .= ' AND date_creation >= ? OR date >= ?';
             $parameters[] = $since->format('Y-m-d');
             $parameters[] = $since->format('Y-m-d');
         }
