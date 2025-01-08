@@ -22,6 +22,7 @@ class Application
      *     'no warning': bool,
      *     'since': ?\DateTimeImmutable,
      *     'skip on error': bool,
+     *     'timezone': string,
      * } $options
      */
     private array $options;
@@ -71,6 +72,7 @@ class Application
             'no warning' => false,
             'since' => null,
             'skip on error' => false,
+            'timezone' => 'UTC',
         ];
 
         $this->notification_uuid = null;
@@ -106,12 +108,23 @@ class Application
                 }
             } elseif ($argument === '--no-warning') {
                 $this->options['no warning'] = true;
+            } elseif (str_starts_with($argument, '--timezone=')) {
+                $this->options['timezone'] = substr($argument, strlen('--timezone='));
             } else {
                 echo "Unrecognized option: {$argument}\n\n";
                 echo $this->usage();
                 return -1;
             }
         }
+
+        $timezone = $this->options['timezone'];
+
+        if (!in_array($timezone, timezone_identifiers_list())) {
+            echo "Unrecognized timezone: {$timezone}";
+            return -1;
+        }
+
+        date_default_timezone_set($timezone);
 
         $this->plugins = $this->loadPlugins();
 
@@ -206,13 +219,14 @@ class Application
         Options:
           --dry-run                  simulate an export, but do not write the archive
           --help -h                  display this help message
-          --hostname                 set the GLPI hostname (required to link emails with tickets)
+          --hostname=[TEXT]          set the GLPI hostname (required to link emails with tickets)
           --ignore-contracts         do not load the contracts from ProjectBridge
           --merge-organizations      merge the organizations having the same name
           --merge-users              merge the users having the same email
           --no-warning               do not display the warnings
           --since=[YYYY-MM-DD]       export tickets and contracts after the given date
           --skip-on-error            skip data concerned by an error
+          --timezone=[TEXT]          set the current timezone (should be the same as the server hosting Bileto)
         TEXT;
     }
 

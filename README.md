@@ -83,19 +83,20 @@ The `glpi-export` command accepts several options:
 - `--since=[YYYY-MM-DD]`: export tickets and contracts after the given date.
 - `--skip-on-error`: skip data concerned by an error. This makes the archive more probably compatible with Bileto, but data concerned by an error will not be exported.
 - `--no-warning`: do not display the warnings. It's useful once you know that remaining warnings are not a problem.
-- `--hostname`: set the GLPI hostname. It is required if you want to be able to link emails answering to GLPI notifications with the tickets imported on your future Bileto server.
+- `--hostname=[TEXT]`: set the GLPI hostname. It is required if you want to be able to link emails answering to GLPI notifications with the tickets imported on your future Bileto server.
+- `--timezone=[TEXT]`: set the timezone for the exported dates. It is important to precise the same timezone as the one of the server hosting Bileto. Otherwise, the duplicated tickets and contracts may not be detected correctly.
 - `--ignore-contracts`: do not export the contracts. You need it if you don't use our plugin [ProjectBridge](https://github.com/Probesys/glpi-plugins-projectbridge).
 
 For instance, to export data in the best compatible way with Bileto:
 
 ```console
-$ ./bin/glpi-export --merge-organizations --merge-users --ignore-contracts --skip-on-error
+$ ./bin/glpi-export --timezone=Europe/Paris --merge-organizations --merge-users --ignore-contracts --skip-on-error
 ```
 
 At Probesys, we most often use the command (almost) like this:
 
 ```console
-$ ./bin/glpi-export --merge-organizations --merge-users --hostname=glpi.example.com --since=2024-01-01 --skip-on-error
+$ ./bin/glpi-export --timezone=Europe/Paris --merge-organizations --merge-users --hostname=glpi.example.com --skip-on-error --no-warning
 ```
 
 ### Include the documents in the archive
