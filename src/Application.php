@@ -1337,7 +1337,7 @@ class Application
         foreach ($ticket_users as $ticket_user) {
             $glpi_user_id = $ticket_user['users_id'];
             if ($glpi_user_id === 0) {
-                $glpi_user_id = trim($ticket_user['alternative_email']);
+                $glpi_user_id = strtolower(trim($ticket_user['alternative_email']));
             }
 
             $user_id = $this->getUserId($glpi_user_id);
