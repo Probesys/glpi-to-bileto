@@ -1336,8 +1336,15 @@ class Application
 
         foreach ($ticket_users as $ticket_user) {
             $glpi_user_id = $ticket_user['users_id'];
+            $alternative_email = strtolower(trim($ticket_user['alternative_email']));
+
+            if ($glpi_user_id === 0 && $alternative_email === '') {
+                $this->warning("{$actor_context}: Skipping unknown actor (no id or alternative email).");
+                continue;
+            }
+
             if ($glpi_user_id === 0) {
-                $glpi_user_id = strtolower(trim($ticket_user['alternative_email']));
+                $glpi_user_id = $alternative_email;
             }
 
             $user_id = $this->getUserId($glpi_user_id);
