@@ -577,14 +577,19 @@ class Application
             FROM glpi_projects
         SQL);
 
-        $projects_to_contracts = $this->database->fetchKeyValue(<<<SQL
-            SELECT pb.project_id, pb.contract_id
-            FROM glpi_plugin_projectbridge_contracts pb,
-                 glpi_contracts c,
-                 glpi_projects p
-            WHERE pb.project_id = p.id
-            AND pb.contract_id = c.id
-        SQL);
+        try {
+            $projects_to_contracts = $this->database->fetchKeyValue(<<<SQL
+                SELECT pb.project_id, pb.contract_id
+                FROM glpi_plugin_projectbridge_contracts pb,
+                     glpi_contracts c,
+                     glpi_projects p
+                WHERE pb.project_id = p.id
+                AND pb.contract_id = c.id
+            SQL);
+        } catch (\PDOException $e) {
+            $this->warning('ProjectBridge plugin tables not found, skipping project-task contracts.');
+            $projects_to_contracts = [];
+        }
 
         $sql = <<<SQL
             SELECT id, projects_id, plan_start_date, plan_end_date, name, planned_duration
