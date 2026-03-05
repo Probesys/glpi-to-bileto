@@ -83,7 +83,7 @@ The `glpi-export` command accepts several options:
 - `--since=[YYYY-MM-DD]`: export tickets and contracts after the given date.
 - `--skip-on-error`: skip data concerned by an error. This makes the archive more probably compatible with Bileto, but data concerned by an error will not be exported.
 - `--no-warning`: do not display the warnings. It's useful once you know that remaining warnings are not a problem.
-- `--hostname=[TEXT]`: set the GLPI hostname. It is required if you want to be able to link emails answering to GLPI notifications with the tickets imported on your future Bileto server.
+- `--hostname=[TEXT]`: set the GLPI hostname. It is required if you want to be able to link emails answering to GLPI notifications with the tickets imported on your future Bileto server. It is the result of the command `uname -n` on the server hosting GLPI.
 - `--timezone=[TEXT]`: set the timezone for the exported dates. It is important to precise the same timezone as the one of the server hosting Bileto. Otherwise, the duplicated tickets and contracts may not be detected correctly.
 - `--ignore-contracts`: do not export the contracts. You need it if you don't use our plugin [ProjectBridge](https://github.com/Probesys/glpi-plugins-projectbridge).
 
