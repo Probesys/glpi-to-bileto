@@ -1244,7 +1244,7 @@ class Application
 
         foreach ($document_items as $document_item) {
             $documents = $this->database->fetchAll(<<<SQL
-                SELECT name, filepath
+                SELECT name, filename, filepath
                 FROM glpi_documents
                 WHERE id = :document_id
             SQL, [
@@ -1259,8 +1259,13 @@ class Application
                 continue;
             }
 
+            $name = $documents[0]['name'];
+            if (str_starts_with($name, 'Document ticket')) {
+                $name = $documents[0]['filename'];
+            }
+
             $message_documents[] = [
-                'name' => $documents[0]['name'],
+                'name' => $name,
                 'filepath' => $documents[0]['filepath'],
             ];
         }
