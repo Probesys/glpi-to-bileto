@@ -194,8 +194,10 @@ class Application
         $zip_archive = new \ZipArchive();
         $zip_archive->open($filepath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
 
-        foreach ($files as $filename => $content) {
-            $zip_archive->addFromString($filename, $content);
+        foreach ($files as $entryname => $content) {
+            $entry_filepath = tempnam(sys_get_temp_dir(), 'glpi_to_bileto');
+            file_put_contents($entry_filepath, $content);
+            $zip_archive->addFile($entry_filepath, $entryname);
         }
 
         $zip_archive->close();
