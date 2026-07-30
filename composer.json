@@ -9,7 +9,7 @@
     ],
     "minimum-stability": "stable",
     "require": {
-        "php": ">=8.2",
+        "php": ">=8.4",
         "ext-pdo": "*",
         "ext-pdo_mysql": "*",
         "ext-zip": "*"
