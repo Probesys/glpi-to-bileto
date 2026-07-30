@@ -1253,7 +1253,7 @@ class Application
                 ':document_id' => $document_item['documents_id'],
             ]);
 
-            if (!$documents) {
+            if (!$documents || !$documents[0]['filepath']) {
                 $this->warning(
                     "Skipping Document Item (id {$document_item['id']}):",
                     "the related Document (id {$document_item['documents_id']}) doesn't exist.",
